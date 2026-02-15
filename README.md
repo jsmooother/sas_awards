@@ -1,0 +1,127 @@
+# SAS Awards
+
+A Python toolset for tracking SAS (Scandinavian Airlines) EuroBonus award flight availability from Stockholm Arlanda. Includes a Telegram bot for querying weekend trip pairings and scripts for generating daily reports.
+
+## Features
+
+- **Data fetcher** – Fetches award availability from SAS API and stores in SQLite
+- **Telegram bot** – Query weekend flight pairings with `/CityName` (e.g. `/Barcelona`, `/Oslo`)
+- **Reports** – Daily CSV reports for business-class, Plus, and weekend trips
+
+## Requirements
+
+- Python 3.10+
+- SQLite3
+- Network access to SAS API (`https://beta.sas.se`)
+
+## Quick start
+
+### 1. Clone and enter the project
+
+```bash
+git clone https://github.com/YOUR_USERNAME/sas_awards.git
+cd sas_awards
+```
+
+### 2. Create virtual environment and install dependencies
+
+```bash
+python3 -m venv venv
+source venv/bin/activate   # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+### 3. Set up the data directory
+
+The database is stored in `~/sas_awards/`. Create it and run from there:
+
+```bash
+mkdir -p ~/sas_awards
+cp -r /path/to/sas_awards/* ~/sas_awards/   # if project lives elsewhere
+cd ~/sas_awards
+```
+
+### 4. Fetch initial data
+
+```bash
+source venv/bin/activate
+python update_sas_awards.py
+```
+
+This creates `~/sas_awards/sas_awards.sqlite` and populates the `flights` table.
+
+### 5. Run the Telegram bot (optional)
+
+Create a bot via [@BotFather](https://t.me/BotFather) and set the token:
+
+```bash
+export TELEGRAM_BOT_TOKEN="your_bot_token_here"
+python weekend_bot.py
+```
+
+Or create a `.env` file (see [Configuration](#configuration)).
+
+## Project layout
+
+| File | Description |
+|------|-------------|
+| `update_sas_awards.py` | Fetches availability from SAS API → SQLite `flights` table |
+| `weekend_bot.py` | Telegram bot for `/CityName` weekend pair queries |
+| `split_weekend_trips.sh` | Exports weekend trip CSVs to `reports/weekend_trips/` |
+| `daily_new_business_report.py` | New business-class flights report (uses `flight_history`) |
+| `daily_business_by_date.sh` | Business seats by date (uses `flights`) |
+| `daily_plus_europe.sh` | Plus Europe availability by city |
+| `daily_new_plus_europe2.sh` | New Plus Europe flights (today vs yesterday) |
+| `daily_new_business_by_date.sh` | New business by date (uses `flight_history`) |
+
+## Configuration
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `TELEGRAM_BOT_TOKEN` | Bot token from BotFather | (required for bot) |
+| `DB_PATH` | SQLite database path | `~/sas_awards/sas_awards.sqlite` |
+
+Create a `.env` file in the project root and add:
+
+```
+TELEGRAM_BOT_TOKEN=your_token_here
+```
+
+**Important:** Never commit `.env` or real tokens to git.
+
+## Database schema
+
+The main `flights` table:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| airport_code | TEXT | IATA code (e.g. CPH, BCN) |
+| city_name | TEXT | City name |
+| country_name | TEXT | Country |
+| direction | TEXT | `outbound` or `inbound` |
+| date | TEXT | Flight date (YYYY-MM-DD) |
+| total | INTEGER | Total available seats |
+| ag | INTEGER | Economy (Go) seats |
+| ap | INTEGER | Economy (Plus) seats |
+| ab | INTEGER | Business seats |
+
+Some reports use a `flight_history` table for historical snapshots; see [docs/SETUP.md](docs/SETUP.md) for details.
+
+## Output directories
+
+- **Reports:** `~/OneDrive/SASReports/` (business, Plus Europe CSVs)
+- **Weekend trips:** `reports/weekend_trips/` (per-city CSVs)
+
+Adjust paths in the scripts if your setup differs.
+
+## Scheduling (optional)
+
+To run the updater daily via cron:
+
+```bash
+0 6 * * * cd ~/sas_awards && /path/to/venv/bin/python update_sas_awards.py >> run.log 2>&1
+```
+
+## License
+
+MIT (or as you prefer)

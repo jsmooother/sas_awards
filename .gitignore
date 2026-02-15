@@ -1,0 +1,44 @@
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Environment and secrets
+.env
+.env.local
+*.env
+
+# Database
+*.sqlite
+*.sqlite3
+*.db
+
+# Logs
+*.log
+*.err
+
+# Reports (often contain paths specific to your machine)
+reports/
+OneDrive/
+
+# OS
+.DS_Store
+._*
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
