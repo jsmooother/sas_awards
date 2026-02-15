@@ -19,7 +19,7 @@ A Python toolset for tracking SAS (Scandinavian Airlines) EuroBonus award flight
 ### 1. Clone and enter the project
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/sas_awards.git
+git clone https://github.com/<your-username>/sas_awards.git
 cd sas_awards
 ```
 
