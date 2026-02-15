@@ -20,9 +20,12 @@
   <div class="card-inner">
     {% if filters %}
     <form class="toolbar filters-auto" method="get" action="{{ request.path }}">
-      <div class="search-box">
-        <input type="text" name="city" placeholder="Search city or code…" value="{{ filters.get('city', '') }}" autofocus>
-      </div>
+      <label class="search-label">
+        Search
+        <div class="search-box">
+          <input type="text" name="city" placeholder="Search city or code…" value="{{ filters.get('city', '') }}" autofocus>
+        </div>
+      </label>
       <div class="filters">
         <label>
           Origin
@@ -143,7 +146,7 @@
     loadingEl.style.display = 'none';
     detailEl.style.display = 'block';
     errorEl.style.display = 'none';
-    detailEl.innerHTML = html;
+    detailEl.innerHTML = '<div class="modal-legend">Y = Economy · + = Plus · J = Business</div>' + html;
   }
   function showError(msg) {
     loadingEl.style.display = 'none';
@@ -171,10 +174,10 @@
     if (!Array.isArray(flights) && leg.flights && Array.isArray(leg.flights.flights)) flights = leg.flights.flights;
     if (!Array.isArray(flights)) return null;
     var rows = flights.map(function(f) {
-      var dep = (f.departureTime || '').slice(11, 16);
-      var arr = (f.arrivalTime || '').slice(11, 16);
-      if (!dep) dep = '-';
-      if (!arr) arr = '-';
+      var dep = f.departureTime || '';
+      var arr = f.arrivalTime || '';
+      if (dep.length > 5) dep = dep.slice(11, 16); else if (!dep) dep = '-';
+      if (arr.length > 5) arr = arr.slice(11, 16); else if (!arr) arr = '-';
       var cabins = [];
       var av = f.availability || {};
       if ((av.AG || 0) > 0) cabins.push('Y: ' + av.AG);
