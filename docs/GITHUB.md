@@ -1,5 +1,7 @@
 # GitHub Setup Guide
 
+**Repository:** https://github.com/jsmooother/sas_awards
+
 ## Initial setup (first time)
 
 ### 1. Create a new repository on GitHub

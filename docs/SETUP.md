@@ -15,7 +15,7 @@ git clone https://github.com/YOUR_USERNAME/sas_awards.git
 cd sas_awards
 ```
 
-Replace `YOUR_USERNAME` with your GitHub username or org.
+Repository: https://github.com/jsmooother/sas_awards
 
 ### 2. Create virtual environment
 
