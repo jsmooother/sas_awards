@@ -4,8 +4,11 @@ SAS Awards web dashboard. Run: flask run --host=0.0.0.0 --port=5000
 Access from LAN: http://<macmini-ip>:5000
 """
 import os
-from flask import Flask, render_template, request
+import requests
+from flask import Flask, render_template, request, jsonify
 import sqlite3
+
+ROUTES_API = "https://www.sas.se/bff/award-finder/routes/v1"
 
 app = Flask(__name__)
 DB_PATH = os.path.expanduser(os.environ.get("SAS_DB_PATH", "~/sas_awards/sas_awards.sqlite"))
@@ -224,7 +227,7 @@ def weekend():
     city = args.get("city") or args.get("q", "").strip()
 
     query = """
-        SELECT inb.origin, inb.city_name, outb.date AS outbound, inb.date AS inbound,
+        SELECT inb.origin, inb.city_name, inb.airport_code, outb.date AS outbound, inb.date AS inbound,
                CASE WHEN outb.ag>0 THEN outb.ag ELSE outb.ap END AS seats_out,
                CASE WHEN inb.ag>0 THEN inb.ag ELSE inb.ap END AS seats_in
         FROM flights AS inb
@@ -263,9 +266,87 @@ def weekend():
         "table.html",
         title="Weekend pairs (≥{m} seats, {d1}-{d2} days)".format(m=min_seats, d1=TRIP_DAYS_MIN, d2=TRIP_DAYS_MAX),
         rows=rows,
-        columns=["Origin", "City", "Outbound", "Inbound", "Seats out", "Seats in"],
+        columns=["Origin", "City", "Code", "Outbound", "Inbound", "Seats out", "Seats in"],
         filters={"origin": origin, "city": city, "min_seats": min_seats},
     )
+
+
+@app.route("/api/weekend-detail")
+def weekend_detail():
+    """Return full cabin breakdown (ag, ap, ab) for a weekend pair."""
+    origin = request.args.get("origin")
+    airport_code = request.args.get("airport_code")
+    outbound = request.args.get("outbound")
+    inbound = request.args.get("inbound")
+    if not all([origin, airport_code, outbound, inbound]):
+        return jsonify({"error": "Missing origin, airport_code, outbound, or inbound"}), 400
+
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT origin, airport_code, city_name, country_name, direction, date, ag, ap, ab
+        FROM flights
+        WHERE origin = ? AND airport_code = ? AND direction = 'outbound' AND date = ?
+    """, (origin, airport_code, outbound))
+    out_row = cur.fetchone()
+    cur.execute("""
+        SELECT origin, airport_code, city_name, country_name, direction, date, ag, ap, ab
+        FROM flights
+        WHERE origin = ? AND airport_code = ? AND direction = 'inbound' AND date = ?
+    """, (origin, airport_code, inbound))
+    in_row = cur.fetchone()
+    conn.close()
+
+    if not out_row or not in_row:
+        return jsonify({"error": "Flight pair not found"}), 404
+
+    def to_dict(row):
+        return {
+            "origin": row[0], "airport_code": row[1], "city_name": row[2], "country_name": row[3],
+            "direction": row[4], "date": row[5], "ag": row[6], "ap": row[7], "ab": row[8],
+        }
+
+    return jsonify({
+        "outbound": to_dict(out_row),
+        "inbound": to_dict(in_row),
+    })
+
+
+@app.route("/api/weekend-routes")
+def weekend_routes():
+    """Fetch per-flight data from SAS routes/v1 (on-demand, low volume)."""
+    origin = request.args.get("origin")
+    airport_code = request.args.get("airport_code")
+    outbound = request.args.get("outbound")
+    inbound = request.args.get("inbound")
+    if not all([origin, airport_code, outbound, inbound]):
+        return jsonify({"error": "Missing origin, airport_code, outbound, or inbound"}), 400
+
+    def fetch_routes(orig, dest, date):
+        try:
+            r = requests.get(
+                ROUTES_API,
+                params={
+                    "market": "se-sv",
+                    "origin": orig,
+                    "destination": dest,
+                    "departureDate": date,
+                    "direct": "false",
+                },
+                timeout=15,
+            )
+            r.raise_for_status()
+            return r.json()
+        except Exception as e:
+            return {"_error": str(e)}
+
+    out_flights = fetch_routes(origin, airport_code, outbound)
+    in_flights = fetch_routes(airport_code, origin, inbound)
+
+    return jsonify({
+        "outbound": {"date": outbound, "flights": out_flights},
+        "inbound": {"date": inbound, "flights": in_flights},
+    })
 
 
 @app.route("/new")
@@ -339,4 +420,5 @@ def search():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    port = int(os.environ.get("FLASK_RUN_PORT", "5000"))
+    app.run(host="0.0.0.0", port=port, debug=True)

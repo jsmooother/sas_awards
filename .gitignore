@@ -16,6 +16,7 @@ env/
 # Logs
 *.log
 *.err
+logs/
 
 # Reports (often contain paths specific to your machine)
 reports/

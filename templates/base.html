@@ -131,6 +131,26 @@
     .card-action-content { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1.25rem; }
     .card-action-title { margin: 0 0 0.3rem 0; font-size: 1.0625rem; font-weight: 600; color: #1d1d1f; }
     .card-action-desc { margin: 0; font-size: 0.875rem; color: #86868b; }
+    .row-clickable { cursor: pointer; }
+    .row-clickable:hover { background: rgba(0,122,255,0.06); }
+    .info-btn { background: none; border: none; cursor: pointer; font-size: 1rem; color: #007aff; padding: 0.25rem; line-height: 1; }
+    .info-btn:hover { color: #0051d5; }
+    .modal-overlay { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+    .modal-overlay[hidden] { display: none; }
+    .modal-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.4); }
+    .modal-content { position: relative; background: #fff; border-radius: 12px; max-width: 420px; width: 100%; max-height: 90vh; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
+    .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 1.25rem 1.5rem; border-bottom: 1px solid rgba(0,0,0,0.06); }
+    .modal-title { margin: 0; font-size: 1.125rem; font-weight: 600; }
+    .modal-close { background: none; border: none; font-size: 1.5rem; color: #86868b; cursor: pointer; padding: 0 0.25rem; line-height: 1; }
+    .modal-close:hover { color: #1d1d1f; }
+    .modal-body { padding: 1.5rem; overflow-y: auto; max-height: 60vh; }
+    .modal-detail-leg { margin-bottom: 1.25rem; padding: 1rem; background: rgba(0,0,0,0.03); border-radius: 8px; }
+    .modal-detail-leg:last-child { margin-bottom: 0; }
+    .modal-detail-route { font-weight: 600; margin-bottom: 0.5rem; }
+    .modal-detail-date { font-size: 0.875rem; color: #86868b; margin-bottom: 0.5rem; }
+    .modal-detail-cabins { font-size: 0.875rem; }
+    .modal-detail-flights { font-size: 0.875rem; font-family: ui-monospace, monospace; }
+    .modal-error { color: #c00; font-size: 0.9rem; }
     @media (max-width: 768px) {
       .layout { flex-direction: column; }
       .sidebar {

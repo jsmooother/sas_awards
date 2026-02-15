@@ -5,8 +5,16 @@ Requires: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 Run after update_sas_awards.py and report scripts (e.g. via cron 06:20).
 """
 import os
-import sqlite3
 import sys
+
+# Load .env when run from cron (WorkingDirectory = project root)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+import sqlite3
 import requests
 
 DB_PATH = os.path.expanduser(os.environ.get("SAS_DB_PATH", "~/sas_awards/sas_awards.sqlite"))

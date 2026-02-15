@@ -62,6 +62,12 @@ python weekend_bot.py
 
 Or create a `.env` file (see [Configuration](#configuration)).
 
+**Verify your token:**
+```bash
+python scripts/verify_telegram.py
+```
+(With token in env or `.env` – confirms the bot is reachable.)
+
 ## Project layout
 
 | File | Description |
@@ -133,13 +139,15 @@ Adjust paths in the scripts if your setup differs. Set `SAS_DB_PATH` to point at
 
 The project uses **system cron** (no APScheduler). Run the data updater periodically so the bot and reports have fresh data.
 
-### Add a cron job (macOS)
+### Add cron jobs (macOS)
 
 ```bash
-crontab -e
+./scripts/install-cron.sh
 ```
 
-Add one of these lines (adjust paths to your setup):
+This adds the data updater (every 6 hours). If `TELEGRAM_CHAT_ID` is in `.env`, it also adds the morning report (06:20).
+
+Or add manually with `crontab -e` (adjust paths to your setup):
 
 ```bash
 # Daily at 06:00
@@ -166,7 +174,17 @@ After the updater and report scripts, send a summary to Telegram:
 
 Get your chat ID: message the bot, then visit `https://api.telegram.org/bot<TOKEN>/getUpdates` and find `"chat":{"id":123456789}`.
 
-The bot (`weekend_bot.py`) runs separately and stays in the foreground – use `launchd` or `tmux`/`screen` to keep it running.
+The bot and web dashboard can start automatically on login via launchd:
+
+```bash
+./scripts/install-launchd.sh
+```
+
+This installs:
+- `com.sasawards.telegram` – Telegram bot
+- `com.sasawards.web` – Flask web dashboard
+
+Both load `.env` from the project directory. Web uses port 5001 (5000 is often used by AirPlay).
 
 ## License
 

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.sasawards.telegram</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>PROJECT_PATH/venv/bin/python</string>
+    <string>PROJECT_PATH/weekend_bot.py</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>PROJECT_PATH</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>SAS_DB_PATH</key>
+    <string>PROJECT_PATH/sas_awards.sqlite</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>PROJECT_PATH/logs/telegram-bot.log</string>
+  <key>StandardErrorPath</key>
+  <string>PROJECT_PATH/logs/telegram-bot.err</string>
+</dict>
+</plist>

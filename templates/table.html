@@ -61,19 +61,41 @@
       {% for col in columns %}
       <th>{{ col }}</th>
       {% endfor %}
+      {% if request.path == '/weekend' %}
+      <th></th>
+      {% endif %}
     </tr>
   </thead>
   <tbody>
     {% for row in rows %}
-    <tr>
+    <tr{% if request.path == '/weekend' %} class="row-clickable" data-origin="{{ row[0] }}" data-airport-code="{{ row[2] }}" data-outbound="{{ row[3] }}" data-inbound="{{ row[4] }}"{% endif %}>
       {% for cell in row %}
       <td>{{ cell }}</td>
       {% endfor %}
+      {% if request.path == '/weekend' %}
+      <td><button type="button" class="info-btn" aria-label="Flight details">ℹ</button></td>
+      {% endif %}
     </tr>
     {% endfor %}
   </tbody>
 </table>
 </div>
+{% if request.path == '/weekend' %}
+<div id="flight-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title" hidden>
+  <div class="modal-backdrop"></div>
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2 id="modal-title" class="modal-title">Flight details</h2>
+      <button type="button" class="modal-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="modal-loading">Loading…</div>
+      <div id="modal-detail" style="display:none;"></div>
+      <div id="modal-error" style="display:none;" class="modal-error"></div>
+    </div>
+  </div>
+</div>
+{% endif %}
 <p class="table-hint">Showing {{ rows|length }} rows (max 500).</p>
 {% else %}
 <p class="table-hint">No results. Try adjusting filters.</p>
@@ -101,4 +123,121 @@
   });
 })();
 </script>
+{% if request.path == '/weekend' %}
+<script>
+(function() {
+  var modal = document.getElementById('flight-modal');
+  if (!modal) return;
+  var loadingEl = document.getElementById('modal-loading');
+  var detailEl = document.getElementById('modal-detail');
+  var errorEl = document.getElementById('modal-error');
+
+  function showModal() { modal.removeAttribute('hidden'); }
+  function hideModal() { modal.setAttribute('hidden', ''); }
+  function showLoading() {
+    loadingEl.style.display = 'block';
+    detailEl.style.display = 'none';
+    errorEl.style.display = 'none';
+  }
+  function showDetail(html) {
+    loadingEl.style.display = 'none';
+    detailEl.style.display = 'block';
+    errorEl.style.display = 'none';
+    detailEl.innerHTML = html;
+  }
+  function showError(msg) {
+    loadingEl.style.display = 'none';
+    detailEl.style.display = 'none';
+    errorEl.style.display = 'block';
+    errorEl.textContent = msg;
+  }
+
+  function formatLegDb(data, label) {
+    var route = data.origin + ' \u2192 ' + data.airport_code + ' (' + data.city_name + ', ' + (data.country_name || '') + ')';
+    var cabins = [];
+    if (data.ag > 0) cabins.push('Economy: ' + data.ag);
+    if (data.ap > 0) cabins.push('Plus: ' + data.ap);
+    if (data.ab > 0) cabins.push('Business: ' + data.ab);
+    return '<div class="modal-detail-leg"><div class="modal-detail-route">' + label + ': ' + route + '</div>' +
+      '<div class="modal-detail-date">' + data.date + '</div>' +
+      '<div class="modal-detail-cabins">' + (cabins.length ? cabins.join(' \u2022 ') : 'No seats') + '</div></div>';
+  }
+
+  function formatLegRoutes(leg, label, origin, dest) {
+    var route = label + ': ' + origin + ' \u2192 ' + dest;
+    var date = leg.date || '';
+    var flights = leg.flights;
+    if (flights && flights._error) return null;
+    if (!Array.isArray(flights) && leg.flights && Array.isArray(leg.flights.flights)) flights = leg.flights.flights;
+    if (!Array.isArray(flights)) return null;
+    var rows = flights.map(function(f) {
+      var dep = (f.departureTime || '').slice(11, 16);
+      var arr = (f.arrivalTime || '').slice(11, 16);
+      if (!dep) dep = '-';
+      if (!arr) arr = '-';
+      var cabins = [];
+      var av = f.availability || {};
+      if ((av.AG || 0) > 0) cabins.push('Y: ' + av.AG);
+      if ((av.AP || 0) > 0) cabins.push('+: ' + av.AP);
+      if ((av.AB || 0) > 0) cabins.push('J: ' + av.AB);
+      return dep + ' \u2192 ' + arr + (cabins.length ? ' (' + cabins.join(', ') + ')' : '');
+    });
+    return '<div class="modal-detail-leg"><div class="modal-detail-route">' + route + '</div>' +
+      '<div class="modal-detail-date">' + date + '</div>' +
+      '<div class="modal-detail-flights">' + rows.join('<br>') + '</div></div>';
+  }
+
+  function openModal(origin, airportCode, outbound, inbound) {
+    showModal();
+    showLoading();
+    var routesUrl = '/api/weekend-routes?origin=' + encodeURIComponent(origin) + '&airport_code=' + encodeURIComponent(airportCode) +
+      '&outbound=' + encodeURIComponent(outbound) + '&inbound=' + encodeURIComponent(inbound);
+    var detailUrl = '/api/weekend-detail?origin=' + encodeURIComponent(origin) + '&airport_code=' + encodeURIComponent(airportCode) +
+      '&outbound=' + encodeURIComponent(outbound) + '&inbound=' + encodeURIComponent(inbound);
+
+    fetch(routesUrl)
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.error) { throw new Error(data.error); }
+        var outHtml = formatLegRoutes(data.outbound, 'Outbound', origin, airportCode);
+        var inHtml = formatLegRoutes(data.inbound, 'Inbound', airportCode, origin);
+        if (outHtml && inHtml) {
+          showDetail(outHtml + inHtml);
+          return;
+        }
+        return fetch(detailUrl).then(function(r) { return r.json(); }).then(function(d) {
+          if (d.error) { showError(d.error); return; }
+          showDetail(formatLegDb(d.outbound, 'Outbound') + formatLegDb(d.inbound, 'Inbound'));
+        });
+      })
+      .catch(function(err) {
+        fetch(detailUrl)
+          .then(function(r) { return r.json(); })
+          .then(function(d) {
+            if (d.error) { showError(d.error); return; }
+            showDetail(formatLegDb(d.outbound, 'Outbound') + formatLegDb(d.inbound, 'Inbound'));
+          })
+          .catch(function(e) { showError(e.message || 'Failed to load'); });
+      });
+  }
+
+  document.querySelectorAll('.row-clickable').forEach(function(tr) {
+    tr.addEventListener('click', function(e) {
+      if (e.target.classList.contains('info-btn')) return;
+      openModal(tr.dataset.origin, tr.dataset.airportCode, tr.dataset.outbound, tr.dataset.inbound);
+    });
+  });
+  document.querySelectorAll('.info-btn').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var tr = btn.closest('tr');
+      openModal(tr.dataset.origin, tr.dataset.airportCode, tr.dataset.outbound, tr.dataset.inbound);
+    });
+  });
+
+  modal.querySelector('.modal-close').addEventListener('click', hideModal);
+  modal.querySelector('.modal-backdrop').addEventListener('click', hideModal);
+})();
+</script>
+{% endif %}
 {% endblock %}

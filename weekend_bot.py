@@ -3,6 +3,12 @@ import sys
 print(f"[DEBUG] Starting weekend_bot.py under: {sys.executable}")
 
 # ─── Imports ─────────────────────────────────────────────────────────────────────
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, CommandHandler, filters
 import sqlite3, os
