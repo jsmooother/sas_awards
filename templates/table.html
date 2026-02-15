@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} – SAS Awards{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">{{ title }} <span class="count">({% if rows %}{{ rows|length }}{% else %}0{% endif %})</span></h1>
+  <div class="tabs">
+    <a href="/all" class="{% if request.path == '/all' %}active{% endif %}">All Europe</a>
+    <a href="/business" class="{% if request.path == '/business' %}active{% endif %}">Business</a>
+    <a href="/plus" class="{% if request.path == '/plus' %}active{% endif %}">Plus & Business</a>
+    <a href="/weekend" class="{% if request.path == '/weekend' %}active{% endif %}">Weekend</a>
+    <a href="/new" class="{% if request.path == '/new' %}active{% endif %}">New today</a>
+  </div>
+</div>
+
+{% if message %}
+<div class="msg">{{ message }}</div>
+{% else %}
+
+<div class="card">
+  <div class="card-inner">
+    {% if filters %}
+    <form class="toolbar filters-auto" method="get" action="{{ request.path }}">
+      <div class="search-box">
+        <input type="text" name="city" placeholder="Search city or code…" value="{{ filters.get('city', '') }}" autofocus>
+      </div>
+      <div class="filters">
+        <label>
+          Origin
+          <select name="origin">
+            <option value="">All</option>
+            <option value="ARN" {% if filters.get('origin') == 'ARN' %}selected{% endif %}>ARN</option>
+            <option value="CPH" {% if filters.get('origin') == 'CPH' %}selected{% endif %}>CPH</option>
+          </select>
+        </label>
+        {% if 'from_date' in filters %}
+        <label>
+          From date
+          <input type="date" name="from_date" value="{{ filters.get('from_date', '') }}">
+        </label>
+        <label>
+          To date
+          <input type="date" name="to_date" value="{{ filters.get('to_date', '') }}">
+        </label>
+        {% endif %}
+        {% if 'min_seats' in filters %}
+        <label>
+          Min seats
+          <input type="number" name="min_seats" min="2" value="{{ filters.get('min_seats', 2) }}">
+        </label>
+        {% endif %}
+        <button type="submit">Apply</button>
+      </div>
+    </form>
+    {% endif %}
+
+{% if rows %}
+<div class="table-wrapper">
+<table>
+  <thead>
+    <tr>
+      {% for col in columns %}
+      <th>{{ col }}</th>
+      {% endfor %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      {% for cell in row %}
+      <td>{{ cell }}</td>
+      {% endfor %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="table-hint">Showing {{ rows|length }} rows (max 500).</p>
+{% else %}
+<p class="table-hint">No results. Try adjusting filters.</p>
+{% endif %}
+  </div>
+</div>
+
+{% endif %}
+
+<script>
+(function() {
+  var form = document.querySelector('form.filters-auto');
+  if (!form) return;
+  var cityInput = form.querySelector('input[name="city"]');
+  var debounceTimer;
+  function submitForm() { form.submit(); }
+  if (cityInput) {
+    cityInput.addEventListener('input', function() {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(submitForm, 400);
+    });
+  }
+  form.querySelectorAll('select, input[type="date"], input[type="number"]').forEach(function(el) {
+    el.addEventListener('change', submitForm);
+  });
+})();
+</script>
+{% endblock %}

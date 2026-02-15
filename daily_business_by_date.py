@@ -1,7 +1,7 @@
 #!/bin/bash
-# ~/sas_awards/daily_business_by_date.sh
+# ~/sas_awards/daily_business_by_date.py  (aggregates business by date per origin)
 
-cd /Users/jesper/sas_awards
+cd ~/sas_awards
 
 OUT=~/OneDrive/SASReports/business_by_date_$(date +%Y-%m-%d).csv
 
@@ -9,6 +9,7 @@ sqlite3 sas_awards.sqlite <<'SQL' > "$OUT"
 .headers on
 .mode csv
 SELECT
+  origin,
   date,
   GROUP_CONCAT(
     CASE WHEN direction='outbound' THEN city_name END,
@@ -25,9 +26,9 @@ SELECT
     CASE WHEN direction='inbound'  THEN ab ELSE 0 END
   ) AS inbound_business_seats
 FROM flights
-WHERE ab > 0
-GROUP BY date
-ORDER BY date;
+WHERE ab >= 2
+GROUP BY origin, date
+ORDER BY origin, date;
 SQL
 
 echo "Written $OUT"

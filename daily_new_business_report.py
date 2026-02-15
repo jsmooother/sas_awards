@@ -2,10 +2,11 @@
 import os, sqlite3, csv
 
 from datetime import date
+from report_config import MIN_SEATS
 
 # ─── CONFIG ────────────────────────────────────────────────────────────────
+DB_FILE = os.path.expanduser(os.environ.get("SAS_DB_PATH", "~/sas_awards/sas_awards.sqlite"))
 HOME    = os.path.expanduser("~")
-DB_FILE = os.path.join(HOME, "sas_awards", "sas_awards.sqlite")
 OUT_DIR = os.path.join(HOME, "OneDrive", "SASReports")
 OUT_F   = os.path.join(
     OUT_DIR,
@@ -36,50 +37,49 @@ latest, prev = dates[0], dates[1]
 NEW_OUT_SQL = """
 WITH
   t AS (
-    SELECT airport_code, city_name, flight_date, ab AS business_seats
+    SELECT origin, airport_code, city_name, date, ab AS business_seats
       FROM flight_history
      WHERE fetch_date = :latest
        AND direction   = 'outbound'
-       AND ab > 0
+       AND ab >= :min_seats
   ),
   p AS (
-    SELECT airport_code, flight_date
+    SELECT origin, airport_code, date
       FROM flight_history
      WHERE fetch_date = :prev
        AND direction   = 'outbound'
-       AND ab > 0
+       AND ab >= :min_seats
   )
-SELECT t.city_name, t.airport_code, t.flight_date, t.business_seats
+SELECT t.origin, t.city_name, t.airport_code, t.date, t.business_seats
   FROM t
   LEFT JOIN p
-    ON p.airport_code = t.airport_code
-   AND p.flight_date  = t.flight_date
+    ON p.origin = t.origin AND p.airport_code = t.airport_code AND p.date = t.date
  WHERE p.airport_code IS NULL
- ORDER BY t.city_name COLLATE NOCASE, t.flight_date;
+ ORDER BY t.origin, t.city_name COLLATE NOCASE, t.date;
 """
 
 # 3) same for inbound
 NEW_IN_SQL = NEW_OUT_SQL.replace("direction   = 'outbound'",
                                   "direction   = 'inbound'")
 
+params = {"latest": latest, "prev": prev, "min_seats": MIN_SEATS}
+
 # 4) run and write CSV
 with open(OUT_F, "w", newline="") as f:
     w = csv.writer(f)
 
-    # Outbound block
-    w.writerow(["Outbound Business (NEW since", prev, "→", latest, ")"])
-    w.writerow(["city_name", "airport_code", "flight_date", "business_seats"])
-    cur.execute(NEW_OUT_SQL, {"latest": latest, "prev": prev})
+    w.writerow(["Outbound Business (NEW since", prev, "->", latest, f", >={MIN_SEATS} seats)"])
+    w.writerow(["origin", "city_name", "airport_code", "date", "business_seats"])
+    cur.execute(NEW_OUT_SQL, params)
     for row in cur.fetchall():
         w.writerow(row)
 
     # blank line
     w.writerow([])
 
-    # Inbound block
-    w.writerow(["Inbound Business (NEW since", prev, "→", latest, ")"])
-    w.writerow(["city_name", "airport_code", "flight_date", "business_seats"])
-    cur.execute(NEW_IN_SQL, {"latest": latest, "prev": prev})
+    w.writerow(["Inbound Business (NEW since", prev, "->", latest, f", >={MIN_SEATS} seats)"])
+    w.writerow(["origin", "city_name", "airport_code", "date", "business_seats"])
+    cur.execute(NEW_IN_SQL, params)
     for row in cur.fetchall():
         w.writerow(row)
 

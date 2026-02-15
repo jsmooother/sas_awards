@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}SAS Awards – Dashboard{% endblock %}
+{% block content %}
+<div class="page-header page-header-with-search">
+  <h1 class="page-title">Dashboard</h1>
+  <form class="dashboard-search" action="/search" method="get">
+    <div class="search-box">
+      <input type="text" name="q" placeholder="Search city or code…">
+    </div>
+    <button type="submit" class="btn-primary">Search</button>
+  </form>
+</div>
+
+<div class="card">
+  <div class="card-inner">
+    <div class="stat-row">
+      {% for origin, count in counts.items() %}
+      <div class="stat-item">
+        <div class="stat-label">{{ origin }}</div>
+        <div class="stat-value">{{ count }}</div>
+        <div class="stat-sublabel">flight-dates</div>
+      </div>
+      {% endfor %}
+      {% if total is defined and total is not none %}
+      <div class="stat-item stat-item-total">
+        <div class="stat-label">Total</div>
+        <div class="stat-value">{{ total }}</div>
+        <div class="stat-sublabel">flight-dates</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% if has_history %}
+<div class="card card-action">
+  <div class="card-inner">
+    <div class="card-action-content">
+      <div>
+        <h3 class="card-action-title">New since yesterday</h3>
+        <p class="card-action-desc">Business flights added since last run</p>
+      </div>
+      <a href="/new" class="btn-primary">View new flights →</a>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-inner">
+    <h3 class="card-section-title">Views</h3>
+    <div class="view-grid">
+      <a href="/all" class="view-card">
+        <span class="view-card-label">All Europe</span>
+        <span class="view-card-desc">Economy, Plus, Business (≥2 seats)</span>
+      </a>
+      <a href="/business" class="view-card">
+        <span class="view-card-label">Business</span>
+        <span class="view-card-desc">Business class only</span>
+      </a>
+      <a href="/plus" class="view-card">
+        <span class="view-card-label">Plus & Business</span>
+        <span class="view-card-desc">Plus or Business to Europe</span>
+      </a>
+      <a href="/weekend" class="view-card">
+        <span class="view-card-label">Weekend pairs</span>
+        <span class="view-card-desc">Outbound → Inbound, 3–4 days</span>
+      </a>
+      <a href="/new" class="view-card">
+        <span class="view-card-label">New today</span>
+        <span class="view-card-desc">Business flights added since yesterday</span>
+      </a>
+    </div>
+  </div>
+</div>
+
+<p class="dashboard-hint">Data from ARN and CPH. Filters update as you type.</p>
+{% endblock %}

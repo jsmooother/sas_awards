@@ -1,18 +1,19 @@
 # SAS Awards
 
-A Python toolset for tracking SAS (Scandinavian Airlines) EuroBonus award flight availability from Stockholm Arlanda. Includes a Telegram bot for querying weekend trip pairings and scripts for generating daily reports.
+A Python toolset for tracking SAS (Scandinavian Airlines) EuroBonus award flight availability from **Stockholm Arlanda (ARN)** and **Copenhagen (CPH)**. Includes a Telegram bot for querying weekend trip pairings and scripts for generating daily reports.
 
 ## Features
 
 - **Data fetcher** – Fetches award availability from SAS API and stores in SQLite
 - **Telegram bot** – Query weekend flight pairings with `/CityName` (e.g. `/Barcelona`, `/Oslo`)
 - **Reports** – Daily CSV reports for business-class, Plus, and weekend trips
+- **Web dashboard** – Browse All Europe, Business, Plus & Business, Weekend pairs; live filters
 
 ## Requirements
 
 - Python 3.10+
 - SQLite3
-- Network access to SAS API (`https://beta.sas.se`)
+- Network access to SAS API (`https://www.sas.se`)
 
 ## Quick start
 
@@ -68,8 +69,10 @@ Or create a `.env` file (see [Configuration](#configuration)).
 | `update_sas_awards.py` | Fetches availability from SAS API → SQLite `flights` table |
 | `weekend_bot.py` | Telegram bot for `/CityName` weekend pair queries |
 | `split_weekend_trips.sh` | Exports weekend trip CSVs to `reports/weekend_trips/` |
-| `daily_new_business_report.py` | New business-class flights report (uses `flight_history`) |
+| `daily_new_business_report.py` | New business-class flights (uses `flight_history`) |
 | `daily_business_by_date.sh` | Business seats by date (uses `flights`) |
+| `scripts/morning_report.py` | Morning summary → Telegram |
+| `app.py` | Web dashboard (Flask) |
 | `daily_plus_europe.sh` | Plus Europe availability by city |
 | `daily_new_plus_europe2.sh` | New Plus Europe flights (today vs yesterday) |
 | `daily_new_business_by_date.sh` | New business by date (uses `flight_history`) |
@@ -95,6 +98,7 @@ The main `flights` table:
 
 | Column | Type | Description |
 |--------|------|-------------|
+| origin | TEXT | Departure airport (ARN, CPH) |
 | airport_code | TEXT | IATA code (e.g. CPH, BCN) |
 | city_name | TEXT | City name |
 | country_name | TEXT | Country |
@@ -107,20 +111,62 @@ The main `flights` table:
 
 Some reports use a `flight_history` table for historical snapshots; see [docs/SETUP.md](docs/SETUP.md) for details.
 
+## Report filters
+
+Reports only show flights that are realistically bookable:
+
+| Filter | Value | Purpose |
+|--------|-------|---------|
+| **Min seats** | 2 | Reward flights are only useful when 2+ seats are available (couples/friends) |
+| **Weekend trip length** | 3–4 days | Outbound to inbound: 3–4 days (typical long weekend) |
+
+Configure in `report_config.py` if you need different thresholds.
+
 ## Output directories
 
 - **Reports:** `~/OneDrive/SASReports/` (business, Plus Europe CSVs)
 - **Weekend trips:** `reports/weekend_trips/` (per-city CSVs)
 
-Adjust paths in the scripts if your setup differs.
+Adjust paths in the scripts if your setup differs. Set `SAS_DB_PATH` to point at your DB when running from a different location.
 
-## Scheduling (optional)
+## Scheduling
 
-To run the updater daily via cron:
+The project uses **system cron** (no APScheduler). Run the data updater periodically so the bot and reports have fresh data.
+
+### Add a cron job (macOS)
 
 ```bash
-0 6 * * * cd ~/sas_awards && /path/to/venv/bin/python update_sas_awards.py >> run.log 2>&1
+crontab -e
 ```
+
+Add one of these lines (adjust paths to your setup):
+
+```bash
+# Daily at 06:00
+0 6 * * * cd /Users/jeppe/sas-awards && /Users/jeppe/sas-awards/venv/bin/python update_sas_awards.py >> /Users/jeppe/sas-awards/run.log 2>&1
+
+# Every 6 hours
+0 */6 * * * cd /Users/jeppe/sas-awards && /Users/jeppe/sas-awards/venv/bin/python update_sas_awards.py >> /Users/jeppe/sas-awards/run.log 2>&1
+```
+
+If the project lives in `~/sas_awards`:
+
+```bash
+0 6 * * * cd ~/sas_awards && ~/sas_awards/venv/bin/python update_sas_awards.py >> ~/sas_awards/run.log 2>&1
+```
+
+### Morning report to Telegram
+
+After the updater and report scripts, send a summary to Telegram:
+
+```bash
+# 06:20 – requires TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID
+20 6 * * * cd ~/sas_awards && TELEGRAM_CHAT_ID=your_chat_id ~/sas_awards/venv/bin/python scripts/morning_report.py >> ~/sas_awards/run.log 2>&1
+```
+
+Get your chat ID: message the bot, then visit `https://api.telegram.org/bot<TOKEN>/getUpdates` and find `"chat":{"id":123456789}`.
+
+The bot (`weekend_bot.py`) runs separately and stays in the foreground – use `launchd` or `tmux`/`screen` to keep it running.
 
 ## License
 

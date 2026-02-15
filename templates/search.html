@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Search – SAS Awards{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Search</h1>
+</div>
+
+<div class="card">
+  <div class="card-inner">
+    <form action="/search" method="get" class="toolbar" style="max-width:400px;">
+      <div class="search-box" style="flex:1;">
+        <input type="text" name="q" placeholder="Search city or code…" value="{{ q }}">
+      </div>
+      <button type="submit" class="btn-primary" style="margin:0;">Search</button>
+    </form>
+
+{% if q %}
+<p class="table-hint" style="margin-top:1rem;">Matches for <strong>{{ q }}</strong></p>
+{% if results %}
+<table>
+  <thead>
+    <tr><th>City</th><th>Code</th><th>Origin</th><th>Actions</th></tr>
+  </thead>
+  <tbody>
+  {% for origin, city, code in results %}
+  <tr>
+    <td>{{ city }}</td>
+    <td>{{ code }}</td>
+    <td>{{ origin }}</td>
+    <td>
+      <a href="/all?origin={{ origin }}&city={{ city }}">All</a>
+      <a href="/business?origin={{ origin }}&city={{ city }}" style="margin-left:0.5rem;">Business</a>
+      <a href="/plus?origin={{ origin }}&city={{ city }}" style="margin-left:0.5rem;">Plus</a>
+      <a href="/weekend?origin={{ origin }}&city={{ city }}" style="margin-left:0.5rem;">Weekend</a>
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="table-hint">{{ results|length }} matches.</p>
+{% else %}
+<p class="table-hint">No matches.</p>
+{% endif %}
+{% else %}
+<p class="table-hint">Enter a city name or airport code and click Search.</p>
+{% endif %}
+  </div>
+</div>
+{% endblock %}

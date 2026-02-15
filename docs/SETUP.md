@@ -115,6 +115,26 @@ To support history-based reports, you would need to:
 1. Add a `flight_history` table with columns like: `fetch_date`, `airport_code`, `city_name`, `direction`, `flight_date`, `ab`, etc.
 2. Modify `update_sas_awards.py` (or add a wrapper) to INSERT into `flight_history` after each run instead of (or in addition to) replacing `flights`.
 
+## Cron (scheduling the updater)
+
+The data updater uses **system cron** – no APScheduler dependency.
+
+1. Edit crontab: `crontab -e`
+2. Add a line (replace paths with yours):
+
+   ```bash
+   # Daily at 06:00
+   0 6 * * * cd ~/sas_awards && ~/sas_awards/venv/bin/python update_sas_awards.py >> ~/sas_awards/run.log 2>&1
+   ```
+
+3. Save and exit. The job will run at the specified time.
+
+For more frequent updates (e.g. every 6 hours):
+
+```bash
+0 */6 * * * cd ~/sas_awards && ~/sas_awards/venv/bin/python update_sas_awards.py >> ~/sas_awards/run.log 2>&1
+```
+
 ## Path summary
 
 | Path | Purpose |
