@@ -7,15 +7,15 @@
 
 <div class="card">
   <div class="card-inner">
-    <form action="/search" method="get" class="toolbar" style="max-width:400px;">
-      <div class="search-box" style="flex:1;">
+    <form action="/search" method="get" class="toolbar search-toolbar">
+      <div class="search-box search-toolbar-box">
         <input type="text" name="q" placeholder="Search city or code…" value="{{ q }}">
       </div>
-      <button type="submit" class="btn-primary" style="margin:0;">Search</button>
+      <button type="submit" class="btn-primary search-toolbar-btn">Search</button>
     </form>
 
 {% if q %}
-<p class="table-hint" style="margin-top:1rem;">Matches for <strong>{{ q }}</strong></p>
+<p class="table-hint search-results-hint">Matches for <strong>{{ q }}</strong></p>
 {% if results %}
 <table>
   <thead>
@@ -29,9 +29,9 @@
     <td>{{ origin }}</td>
     <td>
       <a href="/all?origin={{ origin }}&city={{ city }}">All</a>
-      <a href="/business?origin={{ origin }}&city={{ city }}" style="margin-left:0.5rem;">Business</a>
-      <a href="/plus?origin={{ origin }}&city={{ city }}" style="margin-left:0.5rem;">Plus</a>
-      <a href="/weekend?origin={{ origin }}&city={{ city }}" style="margin-left:0.5rem;">Weekend</a>
+      <a href="/business?origin={{ origin }}&city={{ city }}" class="search-action-link">Business</a>
+      <a href="/plus?origin={{ origin }}&city={{ city }}" class="search-action-link">Plus</a>
+      <a href="/weekend?origin={{ origin }}&city={{ city }}" class="search-action-link">Weekend</a>
     </td>
   </tr>
   {% endfor %}
@@ -46,4 +46,11 @@
 {% endif %}
   </div>
 </div>
+<style>
+  .search-toolbar { max-width: 400px; }
+  .search-toolbar-box { flex: 1; }
+  .search-toolbar-btn { margin: 0; }
+  .search-results-hint { margin-top: 1rem; }
+  .search-action-link { margin-left: 0.5rem; }
+</style>
 {% endblock %}

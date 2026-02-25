@@ -2,9 +2,21 @@
 {% block title %}ARN → US Calendar – SAS Awards{% endblock %}
 {% block content %}
 <style>
-  .cal-subtitle { color: #86868b; font-size: 0.9375rem; margin: 0.25rem 0 0; }
+  :root {
+    --us-palette-1-bg: #dbeafe; --us-palette-1-bdr: #3b82f6; --us-palette-1-tx: #1e40af;
+    --us-palette-2-bg: #fee2e2; --us-palette-2-bdr: #ef4444; --us-palette-2-tx: #991b1b;
+    --us-palette-3-bg: #d1fae5; --us-palette-3-bdr: #10b981; --us-palette-3-tx: #065f46;
+    --us-palette-4-bg: #fef3c7; --us-palette-4-bdr: #f59e0b; --us-palette-4-tx: #92400e;
+    --us-palette-5-bg: #ede9fe; --us-palette-5-bdr: #8b5cf6; --us-palette-5-tx: #5b21b6;
+    --us-palette-6-bg: #e0f2fe; --us-palette-6-bdr: #0ea5e9; --us-palette-6-tx: #0c4a6e;
+    --us-palette-7-bg: #fce7f3; --us-palette-7-bdr: #ec4899; --us-palette-7-tx: #9d174d;
+    --us-palette-8-bg: #f0fdf4; --us-palette-8-bdr: #22c55e; --us-palette-8-tx: #166534;
+    --us-book-btn-bg: #000080;
+    --us-book-btn-hover-bg: #000066;
+  }
+  .cal-subtitle { color: var(--color-text-muted); font-size: 0.9375rem; margin: 0.25rem 0 0; }
   .cal-year-label {
-    font-size: 2.5rem; font-weight: 700; color: #ff3b30;
+    font-size: 2.5rem; font-weight: 700; color: var(--chart-border-4);
     letter-spacing: -0.04em; margin: 0 0 1rem;
   }
   .year-grid {
@@ -14,7 +26,7 @@
   @media (max-width: 640px)  { .year-grid { grid-template-columns: 1fr; } }
 
   .cal-month-name {
-    font-size: 1rem; font-weight: 700; color: #1d1d1f;
+    font-size: 1rem; font-weight: 700; color: var(--color-text-primary);
     margin-bottom: 0.35rem; letter-spacing: -0.02em;
   }
   .cal-header {
@@ -22,7 +34,7 @@
     text-align: center; margin-bottom: 2px;
   }
   .cal-hday {
-    font-size: 0.6rem; font-weight: 600; color: #86868b;
+    font-size: 0.6rem; font-weight: 600; color: var(--color-text-muted);
     text-transform: uppercase; letter-spacing: 0.04em;
   }
   .cal-week { margin-bottom: 1px; }
@@ -30,13 +42,13 @@
     display: grid; grid-template-columns: repeat(7, 1fr); text-align: center;
   }
   .cal-day {
-    font-size: 0.75rem; color: #1d1d1f; line-height: 1.8;
+    font-size: 0.75rem; color: var(--color-text-primary); line-height: 1.8;
     position: relative;
   }
   .cal-day.empty { visibility: hidden; }
   .cal-day.past { color: #c7c7cc; }
   .cal-day.today span {
-    background: #ff3b30; color: #fff; border-radius: 50%;
+    background: var(--chart-border-4); color: var(--color-bg-surface); border-radius: 50%;
     width: 22px; height: 22px;
     display: inline-flex; align-items: center; justify-content: center;
     font-weight: 600;
@@ -51,6 +63,9 @@
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     transition: filter 0.15s; border-left: 2.5px solid;
     margin-right: 1px;
+    background: var(--evt-bg);
+    border-left-color: var(--evt-border);
+    color: var(--evt-text);
   }
   .cal-event:hover { filter: brightness(0.92); }
   .cal-event.continues-right { border-radius: 3px 0 0 3px; margin-right: 0; }
@@ -61,49 +76,51 @@
     display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem;
     margin-bottom: 0.5rem;
   }
-  .legend-item {
-    display: flex; align-items: center; gap: 0.4rem;
-    font-size: 0.85rem; font-weight: 500; color: #1d1d1f;
-  }
+  .legend-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 500; color: var(--color-text-primary); }
   .legend-swatch {
     width: 14px; height: 14px; border-radius: 4px;
     flex-shrink: 0; border-left: 3px solid;
+    background: var(--swatch-bg);
+    border-color: var(--swatch-border);
   }
-  .cal-summary { font-size: 0.9rem; color: #86868b; }
+  .cal-summary { font-size: 0.9rem; color: var(--color-text-muted); }
 
   .modal-flight { padding: 0.25rem 0; }
   .modal-flight-city {
-    font-size: 1.2rem; font-weight: 700; margin-bottom: 0.5rem; color: #1d1d1f;
+    font-size: 1.2rem; font-weight: 700; margin-bottom: 0.5rem; color: var(--color-text-primary);
   }
   .modal-flight-legs {
     display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap;
   }
   .modal-flight-leg {
-    flex: 1; min-width: 140px; padding: 1rem; background: rgba(0,0,0,0.03);
-    border-radius: 10px;
+    flex: 1; min-width: 140px; padding: 1rem; background: var(--color-bg-muted);
+    border-radius: var(--radius-lg);
   }
   .modal-leg-label {
     font-size: 0.65rem; font-weight: 600; text-transform: uppercase;
-    letter-spacing: 0.06em; color: #86868b; margin-bottom: 0.5rem;
+    letter-spacing: 0.06em; color: var(--color-text-muted); margin-bottom: 0.5rem;
   }
   .modal-leg-date { font-size: 1rem; font-weight: 600; margin-bottom: 0.15rem; }
-  .modal-leg-day { font-size: 0.8rem; color: #86868b; margin-bottom: 0.5rem; }
-  .modal-leg-seats { font-size: 0.85rem; color: #515154; line-height: 1.5; }
-  .modal-leg-seats strong { color: #1d1d1f; }
+  .modal-leg-day { font-size: 0.8rem; color: var(--color-text-muted); margin-bottom: 0.5rem; }
+  .modal-leg-seats { font-size: 0.85rem; color: var(--color-text-secondary); line-height: 1.5; }
+  .modal-leg-seats strong { color: var(--color-text-primary); }
   .modal-trip-info {
-    font-size: 0.85rem; color: #86868b; margin-bottom: 1rem;
-    padding: 0.5rem 0; border-top: 1px solid rgba(0,0,0,0.06);
+    font-size: 0.85rem; color: var(--color-text-muted); margin-bottom: 1rem;
+    padding: 0.5rem 0; border-top: 1px solid var(--color-border-subtle);
   }
   .modal-book-btn {
     display: block; width: 100%; padding: 0.85rem; text-align: center;
-    background: #000080; color: #fff; border: none; border-radius: 10px;
+    background: var(--us-book-btn-bg); color: var(--color-bg-surface); border: none; border-radius: var(--radius-lg);
     font-size: 1rem; font-weight: 600; cursor: pointer; text-decoration: none;
     transition: background 0.2s;
   }
-  .modal-book-btn:hover { background: #000066; }
+  .modal-book-btn:hover { background: var(--us-book-btn-hover-bg); }
   .no-pairs-msg {
-    text-align: center; padding: 3rem 1rem; color: #86868b; font-size: 1rem;
+    text-align: center; padding: 3rem 1rem; color: var(--color-text-muted); font-size: 1rem;
   }
+  .cal-input-short { width: 70px; }
+  .us-calendar-inner { padding: 1.25rem 1.5rem; }
+  .us-modal-content { max-width: 460px; }
 </style>
 
 <div class="page-header">
@@ -127,11 +144,11 @@
         </label>
         <label>
           Min days
-          <input type="number" name="min_days" min="1" max="30" value="{{ filters.min_days }}" style="width:70px;">
+          <input type="number" name="min_days" min="1" max="30" value="{{ filters.min_days }}" class="cal-input-short">
         </label>
         <label>
           Max days
-          <input type="number" name="max_days" min="1" max="30" value="{{ filters.max_days }}" style="width:70px;">
+          <input type="number" name="max_days" min="1" max="30" value="{{ filters.max_days }}" class="cal-input-short">
         </label>
         <button type="submit">Apply</button>
       </div>
@@ -149,7 +166,7 @@
 
 {# ── Year calendar ── #}
 <div class="card">
-  <div class="card-inner" style="padding:1.25rem 1.5rem;">
+  <div class="card-inner us-calendar-inner">
     <div class="cal-year-label" id="yearTitle"></div>
     <div id="calendar" class="year-grid"></div>
     {% if not pairs %}
@@ -164,7 +181,7 @@
 {# ── Flight detail modal ── #}
 <div id="flight-modal" class="modal-overlay" role="dialog" aria-modal="true" hidden>
   <div class="modal-backdrop"></div>
-  <div class="modal-content" style="max-width:460px;">
+  <div class="modal-content us-modal-content">
     <div class="modal-header">
       <h2 class="modal-title" id="modal-title">Flight Details</h2>
       <button type="button" class="modal-close" aria-label="Close">&times;</button>
@@ -188,15 +205,20 @@
   var WDAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
   var DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 
+  var styles = getComputedStyle(document.documentElement);
+  function token(name, fallback) {
+    var value = styles.getPropertyValue(name);
+    return (value && value.trim()) || fallback;
+  }
   var PALETTE = [
-    {bg:'#dbeafe', bdr:'#3b82f6', tx:'#1e40af'},
-    {bg:'#fee2e2', bdr:'#ef4444', tx:'#991b1b'},
-    {bg:'#d1fae5', bdr:'#10b981', tx:'#065f46'},
-    {bg:'#fef3c7', bdr:'#f59e0b', tx:'#92400e'},
-    {bg:'#ede9fe', bdr:'#8b5cf6', tx:'#5b21b6'},
-    {bg:'#e0f2fe', bdr:'#0ea5e9', tx:'#0c4a6e'},
-    {bg:'#fce7f3', bdr:'#ec4899', tx:'#9d174d'},
-    {bg:'#f0fdf4', bdr:'#22c55e', tx:'#166534'},
+    {bg: token('--us-palette-1-bg', '#dbeafe'), bdr: token('--us-palette-1-bdr', '#3b82f6'), tx: token('--us-palette-1-tx', '#1e40af')},
+    {bg: token('--us-palette-2-bg', '#fee2e2'), bdr: token('--us-palette-2-bdr', '#ef4444'), tx: token('--us-palette-2-tx', '#991b1b')},
+    {bg: token('--us-palette-3-bg', '#d1fae5'), bdr: token('--us-palette-3-bdr', '#10b981'), tx: token('--us-palette-3-tx', '#065f46')},
+    {bg: token('--us-palette-4-bg', '#fef3c7'), bdr: token('--us-palette-4-bdr', '#f59e0b'), tx: token('--us-palette-4-tx', '#92400e')},
+    {bg: token('--us-palette-5-bg', '#ede9fe'), bdr: token('--us-palette-5-bdr', '#8b5cf6'), tx: token('--us-palette-5-tx', '#5b21b6')},
+    {bg: token('--us-palette-6-bg', '#e0f2fe'), bdr: token('--us-palette-6-bdr', '#0ea5e9'), tx: token('--us-palette-6-tx', '#0c4a6e')},
+    {bg: token('--us-palette-7-bg', '#fce7f3'), bdr: token('--us-palette-7-bdr', '#ec4899'), tx: token('--us-palette-7-tx', '#9d174d')},
+    {bg: token('--us-palette-8-bg', '#f0fdf4'), bdr: token('--us-palette-8-bdr', '#22c55e'), tx: token('--us-palette-8-tx', '#166534')},
   ];
 
   function cityColor(code) {
@@ -217,7 +239,7 @@
     legendEl.innerHTML = cities.map(function(c) {
       var col = cityColor(c);
       return '<div class="legend-item">' +
-        '<div class="legend-swatch" style="background:' + col.bg + ';border-color:' + col.bdr + ';"></div>' +
+        '<div class="legend-swatch" style="--swatch-bg:' + col.bg + ';--swatch-border:' + col.bdr + ';"></div>' +
         '<span>' + (cityNames[c] || c) + ' (' + c + ')</span></div>';
     }).join('');
     var cityCounts = {};
@@ -296,7 +318,7 @@
 
           out += '<div class="' + spanCls + '" data-pair-id="' + evt.id + '" ' +
             'style="grid-column:' + (evt.sc + 1) + '/' + (evt.ec + 2) +
-            ';background:' + col.bg + ';border-left-color:' + col.bdr + ';color:' + col.tx + ';">' +
+            ';--evt-bg:' + col.bg + ';--evt-border:' + col.bdr + ';--evt-text:' + col.tx + ';">' +
             evt.code + '</div>';
         }
         out += '</div>';

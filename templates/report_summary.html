@@ -6,7 +6,7 @@
   <div class="tabs">
     <a href="/reports/business-by-date">Business by Date</a>
     <a href="/reports/new-business">New Business</a>
-    <a href="/reports/plus-europe">Plus Europe</a>
+    <a href="/reports/plus-europe">Europe</a>
     <a href="/reports/weekend-trips">Weekend Trips</a>
     <a href="/reports/summary" class="active">Summary</a>
   </div>
@@ -16,18 +16,18 @@
 <div class="card">
   <div class="card-inner">
     <h3 class="card-section-title">Flight-Dates by Origin (≥2 seats)</h3>
-    <div style="display:flex;gap:2rem;flex-wrap:wrap;align-items:flex-start;">
-      <div style="flex:1;min-width:280px;">
-        <div class="stat-row" style="margin-bottom:1rem;">
+    <div class="summary-overview-layout">
+      <div class="summary-overview-stats">
+        <div class="stat-row summary-stat-row">
           {% for origin, direction, cnt in summary_counts %}
-          <div class="stat-item" style="min-width:100px;">
+          <div class="stat-item summary-stat-item">
             <div class="stat-label">{{ origin }} {{ direction }}</div>
-            <div class="stat-value" style="font-size:1.35rem;">{{ cnt }}</div>
+            <div class="stat-value summary-stat-value">{{ cnt }}</div>
           </div>
           {% endfor %}
         </div>
       </div>
-      <div style="flex:1;min-width:280px;max-width:450px;height:220px;">
+      <div class="summary-chart-wrap">
         <canvas id="summaryChart"></canvas>
       </div>
     </div>
@@ -61,9 +61,9 @@
   </div>
 </div>
 
-<div style="display:flex;gap:1.5rem;flex-wrap:wrap;">
+<div class="summary-bottom-grid">
   {# ── Top business ── #}
-  <div class="card" style="flex:1;min-width:320px;">
+  <div class="card summary-bottom-card">
     <div class="card-inner">
       <h3 class="card-section-title">Top Business Flights</h3>
       {% if top_business %}
@@ -89,7 +89,7 @@
   </div>
 
   {# ── Top weekend cities ── #}
-  <div class="card" style="flex:1;min-width:320px;">
+  <div class="card summary-bottom-card">
     <div class="card-inner">
       <h3 class="card-section-title">Top Weekend Cities</h3>
       {% if top_weekend %}
@@ -118,6 +118,11 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script>
 (function() {
+  var styles = getComputedStyle(document.documentElement);
+  function token(name, fallback) {
+    var value = styles.getPropertyValue(name);
+    return (value && value.trim()) || (fallback || '');
+  }
   var data = {{ summary_chart | tojson }};
   var el = document.getElementById('summaryChart');
   if (!el || !data || !data.labels || !data.labels.length) return;
@@ -129,15 +134,15 @@
         {
           label: 'Outbound',
           data: data.datasets[0].data,
-          backgroundColor: 'rgba(0,122,255,0.7)',
-          borderColor: 'rgba(0,122,255,1)',
+          backgroundColor: token('--chart-color-1'),
+          borderColor: token('--chart-border-1'),
           borderWidth: 1,
         },
         {
           label: 'Inbound',
           data: data.datasets[1].data,
-          backgroundColor: 'rgba(255,149,0,0.7)',
-          borderColor: 'rgba(255,149,0,1)',
+          backgroundColor: token('--chart-color-2'),
+          borderColor: token('--chart-border-2'),
           borderWidth: 1,
         },
       ],
@@ -151,4 +156,14 @@
   });
 })();
 </script>
+<style>
+  .summary-overview-layout { display: flex; gap: 2rem; flex-wrap: wrap; align-items: flex-start; }
+  .summary-overview-stats { flex: 1; min-width: 280px; }
+  .summary-stat-row { margin-bottom: 1rem; }
+  .summary-stat-item { min-width: 100px; }
+  .summary-stat-value { font-size: 1.35rem; }
+  .summary-chart-wrap { flex: 1; min-width: 280px; max-width: 450px; height: 220px; }
+  .summary-bottom-grid { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+  .summary-bottom-card { flex: 1; min-width: 320px; }
+</style>
 {% endblock %}

@@ -106,8 +106,8 @@
     </div>
     <div class="modal-body">
       <div id="modal-loading">Loading…</div>
-      <div id="modal-detail" style="display:none;"></div>
-      <div id="modal-error" style="display:none;" class="modal-error"></div>
+      <div id="modal-detail" hidden></div>
+      <div id="modal-error" class="modal-error" hidden></div>
     </div>
   </div>
 </div>
@@ -151,20 +151,20 @@
   function showModal() { modal.removeAttribute('hidden'); }
   function hideModal() { modal.setAttribute('hidden', ''); }
   function showLoading() {
-    loadingEl.style.display = 'block';
-    detailEl.style.display = 'none';
-    errorEl.style.display = 'none';
+    loadingEl.hidden = false;
+    detailEl.hidden = true;
+    errorEl.hidden = true;
   }
   function showDetail(html) {
-    loadingEl.style.display = 'none';
-    detailEl.style.display = 'block';
-    errorEl.style.display = 'none';
+    loadingEl.hidden = true;
+    detailEl.hidden = false;
+    errorEl.hidden = true;
     detailEl.innerHTML = '<div class="modal-legend">Y = Economy · + = Plus · J = Business</div>' + html;
   }
   function showError(msg) {
-    loadingEl.style.display = 'none';
-    detailEl.style.display = 'none';
-    errorEl.style.display = 'block';
+    loadingEl.hidden = true;
+    detailEl.hidden = true;
+    errorEl.hidden = false;
     errorEl.textContent = msg;
   }
 

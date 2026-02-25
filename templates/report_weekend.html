@@ -6,7 +6,7 @@
   <div class="tabs">
     <a href="/reports/business-by-date">Business by Date</a>
     <a href="/reports/new-business">New Business</a>
-    <a href="/reports/plus-europe">Plus Europe</a>
+    <a href="/reports/plus-europe">Europe</a>
     <a href="/reports/weekend-trips" class="active">Weekend Trips</a>
     <a href="/reports/summary">Summary</a>
   </div>
@@ -123,8 +123,8 @@
     </div>
     <div class="modal-body">
       <div id="weekend-calendar-loading">Loading…</div>
-      <div id="weekend-calendar-error" class="modal-error" style="display:none;"></div>
-      <div id="weekend-calendar-detail" style="display:none;"></div>
+      <div id="weekend-calendar-error" class="modal-error" hidden></div>
+      <div id="weekend-calendar-detail" hidden></div>
     </div>
   </div>
 </div>
@@ -143,14 +143,14 @@
   function showModal() { modal.removeAttribute('hidden'); }
   function hideModal() { modal.setAttribute('hidden', ''); }
   function showLoading() {
-    loadingEl.style.display = 'block';
-    errorEl.style.display = 'none';
-    detailEl.style.display = 'none';
+    loadingEl.hidden = false;
+    errorEl.hidden = true;
+    detailEl.hidden = true;
   }
   function showError(msg) {
-    loadingEl.style.display = 'none';
-    detailEl.style.display = 'none';
-    errorEl.style.display = 'block';
+    loadingEl.hidden = true;
+    detailEl.hidden = true;
+    errorEl.hidden = false;
     errorEl.textContent = msg;
   }
 
@@ -162,9 +162,9 @@
     return parts.length ? parts.join(' • ') : 'No seats';
   }
   function showPairsDetail(data) {
-    loadingEl.style.display = 'none';
-    errorEl.style.display = 'none';
-    detailEl.style.display = 'block';
+    loadingEl.hidden = true;
+    errorEl.hidden = true;
+    detailEl.hidden = false;
     var title = data.origin + ' → ' + data.airport_code + ' (' + data.city_name + (data.country_name ? ', ' + data.country_name : '') + ')';
     var modeLabel = data.mode === 'outbound' ? 'Outbound date' : 'Inbound date';
     var rows = (data.pairs || []).map(function(p) {
@@ -177,8 +177,8 @@
     }).join('');
     if (!rows) rows = '<tr><td colspan="4">No matching pairs for this day.</td></tr>';
     detailEl.innerHTML =
-      '<button type="button" id="weekend-back-to-calendar" class="btn-secondary" style="margin-bottom:0.8rem;">← Back to calendar</button>' +
-      '<p class="table-hint" style="margin:0 0 0.85rem;">' + title + ' • ' + modeLabel + ': ' + data.day + '</p>' +
+      '<button type="button" id="weekend-back-to-calendar" class="btn-secondary weekend-back-btn">← Back to calendar</button>' +
+      '<p class="table-hint weekend-modal-headline">' + title + ' • ' + modeLabel + ': ' + data.day + '</p>' +
       '<div class="table-wrapper"><table><thead><tr><th>Outbound</th><th>Inbound</th><th>Outbound cabins</th><th>Inbound cabins</th></tr></thead><tbody>' +
       rows + '</tbody></table></div>';
   }
@@ -242,10 +242,10 @@
 
   function showDetail(data) {
     currentCalendarData = data;
-    loadingEl.style.display = 'none';
-    errorEl.style.display = 'none';
-    detailEl.style.display = 'block';
-    var header = '<p class="table-hint" style="margin:0 0 0.85rem;">' +
+    loadingEl.hidden = true;
+    errorEl.hidden = true;
+    detailEl.hidden = false;
+    var header = '<p class="table-hint weekend-modal-headline">' +
       data.origin + ' → ' + data.airport_code + ' (' + data.city_name + (data.country_name ? ', ' + data.country_name : '') + ')' +
       '</p>';
     var outCal = buildCalendarHtml('Outbound availability (pairs per departure date)', data.outbound_daily_pairs || {}, 'outbound');
@@ -302,4 +302,8 @@
   modal.querySelector('.modal-backdrop').addEventListener('click', hideModal);
 })();
 </script>
+<style>
+  .weekend-back-btn { margin-bottom: 0.8rem; }
+  .weekend-modal-headline { margin: 0 0 0.85rem; }
+</style>
 {% endblock %}

@@ -96,8 +96,8 @@
 {% if chart_data and chart_data.labels and report_path != '/reports/plus-europe' %}
 <div class="card">
   <div class="card-inner">
-    <p class="table-hint" style="margin:0 0 1rem;">{{ subtitle }}</p>
-    <div style="position:relative;height:380px;">
+    <p class="table-hint table-hint-compact">{{ subtitle }}</p>
+    <div class="chart-canvas-wrap chart-canvas-wrap-primary">
       <canvas id="primaryChart"></canvas>
     </div>
   </div>
@@ -108,7 +108,7 @@
 <div class="card">
   <div class="card-inner">
     <h3 class="card-section-title">365-day Europe calendar</h3>
-    <p class="table-hint" style="margin:0 0 1rem;">
+    <p class="table-hint table-hint-compact">
       Daily available seats per direction.
       <span class="calendar-legend-out">Outbound</span>
       <span class="calendar-legend-in">Inbound</span>
@@ -144,7 +144,7 @@
 <div class="card">
   <div class="card-inner">
     <h3 class="card-section-title">{{ secondary_chart_title }}</h3>
-    <div style="position:relative;height:300px;">
+    <div class="chart-canvas-wrap chart-canvas-wrap-secondary">
       <canvas id="secondaryChart"></canvas>
     </div>
   </div>
@@ -195,8 +195,8 @@
     </div>
     <div class="modal-body">
       <div id="plus-day-loading">Loading…</div>
-      <div id="plus-day-error" class="modal-error" style="display:none;"></div>
-      <div id="plus-day-detail" style="display:none;"></div>
+      <div id="plus-day-error" class="modal-error" hidden></div>
+      <div id="plus-day-detail" hidden></div>
     </div>
   </div>
 </div>
@@ -205,13 +205,26 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script>
 (function() {
+  var styles = getComputedStyle(document.documentElement);
+  function token(name, fallback) {
+    var value = styles.getPropertyValue(name);
+    return (value && value.trim()) || (fallback || '');
+  }
   var COLORS = [
-    'rgba(0,122,255,0.7)', 'rgba(255,149,0,0.7)', 'rgba(52,199,89,0.7)',
-    'rgba(255,59,48,0.7)', 'rgba(175,82,222,0.7)', 'rgba(90,200,250,0.7)'
+    token('--chart-color-1'),
+    token('--chart-color-2'),
+    token('--chart-color-3'),
+    token('--chart-color-4'),
+    token('--chart-color-5'),
+    token('--chart-color-6')
   ];
   var BORDERS = [
-    'rgba(0,122,255,1)', 'rgba(255,149,0,1)', 'rgba(52,199,89,1)',
-    'rgba(255,59,48,1)', 'rgba(175,82,222,1)', 'rgba(90,200,250,1)'
+    token('--chart-border-1'),
+    token('--chart-border-2'),
+    token('--chart-border-3'),
+    token('--chart-border-4'),
+    token('--chart-border-5'),
+    token('--chart-border-6')
   ];
 
   function createChart(canvasId, type, rawData) {
@@ -276,14 +289,14 @@
   function showModal() { modal.removeAttribute('hidden'); }
   function hideModal() { modal.setAttribute('hidden', ''); }
   function showLoading() {
-    loadingEl.style.display = 'block';
-    errorEl.style.display = 'none';
-    detailEl.style.display = 'none';
+    loadingEl.hidden = false;
+    errorEl.hidden = true;
+    detailEl.hidden = true;
   }
   function showError(msg) {
-    loadingEl.style.display = 'none';
-    detailEl.style.display = 'none';
-    errorEl.style.display = 'block';
+    loadingEl.hidden = true;
+    detailEl.hidden = true;
+    errorEl.hidden = false;
     errorEl.textContent = msg;
   }
 
@@ -308,7 +321,7 @@
   function cabin(v) { return (v === undefined || v === null) ? '0' : String(v); }
 
   function renderFlightRows(flights) {
-    if (!flights.length) return '<div class="table-hint" style="margin:0.5rem 0;">No flights.</div>';
+    if (!flights.length) return '<div class="table-hint table-hint-inline">No flights.</div>';
     return '<div class="plus-flight-list">' + flights.map(function(f) {
       var av = f.availability || {};
       return (
@@ -326,16 +339,16 @@
   }
 
   function showDetail(payload) {
-    loadingEl.style.display = 'none';
-    errorEl.style.display = 'none';
-    detailEl.style.display = 'block';
+    loadingEl.hidden = true;
+    errorEl.hidden = true;
+    detailEl.hidden = false;
 
     var outFlights = normalizeFlights(payload.outbound);
     var inFlights = normalizeFlights(payload.inbound);
     var title = payload.origin + ' ↔ ' + payload.destination + ' · ' + payload.day;
 
     detailEl.innerHTML =
-      '<p class="table-hint" style="margin:0 0 0.8rem;">' + title + '</p>' +
+      '<p class="table-hint table-hint-header">' + title + '</p>' +
       '<div class="plus-legend">' +
         '<span class="plus-cabin plus-cabin-y">Y Economy</span>' +
         '<span class="plus-cabin plus-cabin-p">P Premium</span>' +
