@@ -4,6 +4,7 @@ SAS Awards web dashboard. Run: flask run --host=0.0.0.0 --port=5000
 Access from LAN: http://<macmini-ip>:5000
 """
 import os
+import datetime as _dt
 import requests
 from flask import Flask, render_template, request, jsonify
 import sqlite3
@@ -787,6 +788,52 @@ def report_summary():
         top_business=top_business,
         top_weekend=top_weekend,
         new_business=new_business,
+    )
+
+
+@app.route("/reports/us-calendar")
+def report_us_calendar():
+    """ARN → US weekend pairs in Business/Plus on a 365-day calendar view."""
+    year = _dt.date.today().year
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT
+            outb.city_name, outb.airport_code,
+            outb.date, inb.date,
+            outb.ap, outb.ab,
+            inb.ap, inb.ab
+        FROM flights AS inb
+        JOIN flights AS outb
+          ON inb.airport_code = outb.airport_code AND inb.origin = outb.origin
+        WHERE inb.direction = 'inbound' AND outb.direction = 'outbound'
+          AND inb.origin = 'ARN'
+          AND inb.country_name = 'USA'
+          AND (outb.ab >= ? OR outb.ap >= ?)
+          AND (inb.ab >= ? OR inb.ap >= ?)
+          AND strftime('%w', inb.date) IN ('6','0','1')
+          AND strftime('%w', outb.date) IN ('3','4','5')
+          AND (julianday(inb.date) - julianday(outb.date)) BETWEEN ? AND ?
+          AND date(inb.date) BETWEEN date('now') AND date('now','+1 year')
+        ORDER BY outb.date, outb.city_name
+    """, (MIN_SEATS, MIN_SEATS, MIN_SEATS, MIN_SEATS, TRIP_DAYS_MIN, TRIP_DAYS_MAX))
+
+    pairs = []
+    for i, r in enumerate(cur.fetchall()):
+        pairs.append({
+            "id": i, "city": r[0], "code": r[1],
+            "outbound": r[2], "inbound": r[3],
+            "plus_out": r[4], "biz_out": r[5],
+            "plus_in": r[6], "biz_in": r[7],
+        })
+
+    cities = sorted(set(p["code"] for p in pairs))
+    conn.close()
+
+    return render_template(
+        "report_us_calendar.html",
+        pairs=pairs, cities=cities, year=year,
     )
 
 
