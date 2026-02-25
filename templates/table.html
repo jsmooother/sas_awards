@@ -35,6 +35,19 @@
             <option value="CPH" {% if filters.get('origin') == 'CPH' %}selected{% endif %}>CPH</option>
           </select>
         </label>
+        {% if destination_options %}
+        <label>
+          Destination
+          <select name="destination">
+            <option value="">All</option>
+            {% for city_name, airport_code in destination_options %}
+            <option value="{{ airport_code }}" {% if filters.get('destination') == airport_code %}selected{% endif %}>
+              {{ airport_code }} · {{ city_name }}
+            </option>
+            {% endfor %}
+          </select>
+        </label>
+        {% endif %}
         {% if 'from_date' in filters %}
         <label>
           From date

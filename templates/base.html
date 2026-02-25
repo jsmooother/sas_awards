@@ -85,6 +85,205 @@
     .filters input[type="date"] { min-width: 130px; }
     .filters input[type="number"] { width: 70px; min-width: 70px; }
     .filters select { cursor: pointer; }
+    .europe-class-filter { min-width: 240px; }
+    .europe-class-options { display: flex; align-items: center; gap: 0.45rem; min-height: 37px; }
+    .direction-picker-label { min-width: 280px; }
+    .direction-picker-top {
+      flex-basis: 100%;
+      max-width: 420px;
+      margin-bottom: 0.1rem;
+    }
+    .direction-picker {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      min-height: 37px;
+    }
+    .tick-option {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      border: 1px solid rgba(0,0,0,0.12);
+      background: #fff;
+      border-radius: 999px;
+      padding: 0.38rem 0.6rem;
+      color: #515154;
+      font-size: 0.84rem;
+      cursor: pointer;
+      user-select: none;
+      transition: border 0.2s, background 0.2s, color 0.2s;
+    }
+    .tick-option input { margin: 0; accent-color: #007aff; }
+    .tick-option:has(input:checked) {
+      border-color: rgba(0,122,255,0.5);
+      background: #e8f4ff;
+      color: #0051d5;
+    }
+    .weekend-filters { align-items: flex-end; }
+    .weekend-origin-country {
+      display: flex;
+      align-items: flex-end;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .weekend-cabin-filter {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      min-height: 37px;
+      padding-bottom: 0.05rem;
+      flex-wrap: nowrap;
+    }
+    .weekend-cabin-label {
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: #86868b;
+      margin-right: 0.1rem;
+    }
+    .weekend-cabin-option {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.9rem;
+      color: #1d1d1f;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .weekend-cabin-option input {
+      margin: 0;
+      accent-color: #007aff;
+    }
+    .weekend-stat-row { gap: 1rem; }
+    .weekend-stat-item { min-width: 240px; }
+    .weekend-stat-metrics {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.7rem;
+      margin-top: 0.6rem;
+    }
+    .weekend-stat-metric {
+      background: rgba(0,0,0,0.03);
+      border-radius: 9px;
+      padding: 0.55rem 0.7rem;
+      border: 1px solid rgba(0,0,0,0.05);
+    }
+    .weekend-stat-metric .stat-value {
+      font-size: 1.35rem;
+      margin: 0;
+      line-height: 1.1;
+    }
+    .weekend-stat-metric .stat-sublabel {
+      margin-top: 0.2rem;
+      font-size: 0.75rem;
+    }
+    .weekend-calendar-modal-content { max-width: 980px; }
+    .year-cal-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 0.7rem;
+      margin-bottom: 1rem;
+    }
+    .month-card {
+      border: 1px solid rgba(0,0,0,0.08);
+      border-radius: 10px;
+      padding: 0.55rem;
+      background: rgba(0,0,0,0.01);
+    }
+    .month-label {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: #515154;
+      margin-bottom: 0.45rem;
+    }
+    .month-days {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 0.2rem;
+    }
+    .calendar-day {
+      min-height: 28px;
+      border-radius: 6px;
+      border: 1px solid rgba(0,0,0,0.08);
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      line-height: 1.05;
+      padding: 0.12rem 0.08rem;
+    }
+    .calendar-day.has-data {
+      border-color: rgba(0,122,255,0.25);
+      background: rgba(0,122,255,0.1);
+    }
+    .calendar-day.is-clickable {
+      cursor: pointer;
+      transition: transform 0.08s, box-shadow 0.16s, background 0.16s;
+    }
+    .calendar-day.is-clickable:hover {
+      background: rgba(0,122,255,0.18);
+      box-shadow: 0 2px 8px rgba(0,122,255,0.18);
+      transform: translateY(-1px);
+    }
+    .calendar-day.is-today { outline: 2px solid rgba(255,149,0,0.5); }
+    .calendar-day-num {
+      font-size: 0.65rem;
+      color: #515154;
+      font-weight: 500;
+    }
+    .calendar-dual-badges {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      min-height: 12px;
+      margin-top: 0.1rem;
+    }
+    .calendar-day-badge {
+      font-size: 0.62rem;
+      font-weight: 600;
+      border-radius: 4px;
+      padding: 0.02rem 0.18rem;
+      line-height: 1.1;
+    }
+    .calendar-day-badge-out {
+      color: #0051d5;
+      background: rgba(0, 122, 255, 0.16);
+    }
+    .calendar-day-badge-in {
+      color: #0f7a3a;
+      background: rgba(52, 199, 89, 0.18);
+      margin-left: auto;
+    }
+    .calendar-legend-out,
+    .calendar-legend-in {
+      display: inline-block;
+      margin-left: 0.4rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      border-radius: 4px;
+      padding: 0.02rem 0.3rem;
+      line-height: 1.2;
+    }
+    .calendar-legend-out {
+      color: #0051d5;
+      background: rgba(0, 122, 255, 0.16);
+    }
+    .calendar-legend-in {
+      color: #0f7a3a;
+      background: rgba(52, 199, 89, 0.18);
+    }
+    .btn-secondary {
+      padding: 0.45rem 0.9rem;
+      font-size: 0.85rem;
+      font-weight: 500;
+      background: #f0f2f5;
+      color: #1d1d1f;
+      border: 1px solid rgba(0,0,0,0.1);
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .btn-secondary:hover { background: #e6e9ee; }
     .filters button, .btn-primary {
       padding: 0.55rem 1.25rem; font-size: 0.9375rem; font-weight: 500;
       background: #007aff; color: #fff; border: none; border-radius: 10px;
@@ -115,6 +314,16 @@
     .stat-label { font-size: 0.6875rem; color: #86868b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
     .stat-value { font-size: 1.75rem; font-weight: 600; margin: 0.35rem 0; letter-spacing: -0.02em; }
     .stat-sublabel { font-size: 0.8125rem; color: #86868b; }
+    .stats-card .card-inner { padding: 0.7rem 0.85rem; }
+    .stats-card .stat-row { gap: 0.55rem; }
+    .stats-card .stat-item {
+      padding: 0.45rem 0.65rem;
+      min-width: 86px;
+      border-radius: 9px;
+    }
+    .stats-card .stat-label { font-size: 0.6rem; }
+    .stats-card .stat-value { font-size: 1.1rem; margin: 0.12rem 0; }
+    .stats-card .stat-sublabel { font-size: 0.7rem; }
     .card-section-title { margin: 0 0 1.25rem 0; font-size: 1rem; font-weight: 600; color: #1d1d1f; letter-spacing: -0.02em; }
     .view-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; }
     .view-card {
@@ -153,6 +362,28 @@
     .modal-detail-flights { font-size: 0.875rem; font-family: ui-monospace, monospace; }
     .modal-legend { font-size: 0.8125rem; color: #86868b; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid rgba(0,0,0,0.08); }
     .modal-error { color: #c00; font-size: 0.9rem; }
+    .plus-day-modal-content { max-width: 920px; }
+    .plus-legend { display: flex; gap: 0.45rem; flex-wrap: wrap; margin-bottom: 0.9rem; }
+    .plus-day-sections { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+    .plus-day-section { background: rgba(0,0,0,0.02); border: 1px solid rgba(0,0,0,0.06); border-radius: 10px; padding: 0.85rem; }
+    .plus-flight-list { display: grid; gap: 0.55rem; }
+    .plus-flight-row {
+      border: 1px solid rgba(0,0,0,0.08);
+      border-radius: 9px;
+      background: #fff;
+      padding: 0.6rem 0.7rem;
+      display: grid;
+      grid-template-columns: 120px 1fr auto;
+      gap: 0.7rem;
+      align-items: center;
+    }
+    .plus-flight-time { font-weight: 700; font-size: 1.05rem; letter-spacing: -0.01em; }
+    .plus-flight-meta { color: #86868b; font-size: 0.9rem; }
+    .plus-flight-cabins { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+    .plus-cabin { border-radius: 999px; padding: 0.15rem 0.45rem; font-size: 0.78rem; font-weight: 600; }
+    .plus-cabin-y { color: #2e5f7a; background: rgba(90,200,250,0.2); }
+    .plus-cabin-p { color: #0051d5; background: rgba(0,122,255,0.16); }
+    .plus-cabin-j { color: #15317e; background: rgba(52,95,255,0.2); }
     @media (max-width: 768px) {
       .layout { flex-direction: column; }
       .sidebar {
@@ -182,6 +413,15 @@
       .toolbar .search-box { width: 100%; min-width: 0; }
       .filters { flex-direction: column; }
       .filters input, .filters select { min-width: 0; width: 100%; font-size: 16px; }
+      .direction-picker-top { max-width: none; }
+      .direction-picker { width: 100%; justify-content: space-between; gap: 0.35rem; }
+      .direction-picker .tick-option { flex: 1; justify-content: center; }
+      .direction-picker .tick-option input { width: auto; }
+      .weekend-origin-country { width: 100%; }
+      .weekend-cabin-filter { width: 100%; flex-wrap: wrap; gap: 0.45rem; }
+      .weekend-cabin-option { width: auto; }
+      .weekend-stat-item { min-width: 0; width: 100%; }
+      .year-cal-grid { grid-template-columns: 1fr; }
       .filters button, .btn-primary { min-height: 44px; width: 100%; }
       .stat-row { flex-direction: column; }
       .stat-item { min-width: 0; }
@@ -191,6 +431,7 @@
       table { font-size: 0.875rem; }
       th, td { padding: 0.65rem 0.75rem; }
       .table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -1.25rem; padding: 0 1.25rem; }
+      .plus-flight-row { grid-template-columns: 1fr; gap: 0.35rem; }
     }
     @media (max-width: 480px) {
       .page-title { font-size: 1.35rem; }
@@ -220,7 +461,7 @@
         <a href="/reports" class="{% if request.path == '/reports' %}active{% endif %}"><span class="sidebar-icon">◆</span> All Reports</a>
         <a href="/reports/business-by-date" class="{% if request.path == '/reports/business-by-date' %}active{% endif %}"><span class="sidebar-icon">▸</span> Business by Date</a>
         <a href="/reports/new-business" class="{% if request.path == '/reports/new-business' %}active{% endif %}"><span class="sidebar-icon">▸</span> New Business</a>
-        <a href="/reports/plus-europe" class="{% if request.path == '/reports/plus-europe' %}active{% endif %}"><span class="sidebar-icon">▸</span> Plus Europe</a>
+        <a href="/reports/plus-europe" class="{% if request.path == '/reports/plus-europe' %}active{% endif %}"><span class="sidebar-icon">▸</span> Europe</a>
         <a href="/reports/weekend-trips" class="{% if request.path == '/reports/weekend-trips' %}active{% endif %}"><span class="sidebar-icon">▸</span> Weekend Trips</a>
         <a href="/reports/summary" class="{% if request.path == '/reports/summary' %}active{% endif %}"><span class="sidebar-icon">▸</span> Morning Summary</a>
         <a href="/reports/us-calendar" class="{% if request.path == '/reports/us-calendar' %}active{% endif %}"><span class="sidebar-icon">▸</span> US Calendar</a>

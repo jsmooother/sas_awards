@@ -6,7 +6,7 @@
   <div class="tabs">
     <a href="/reports/business-by-date" class="{% if report_path == '/reports/business-by-date' %}active{% endif %}">Business by Date</a>
     <a href="/reports/new-business" class="{% if report_path == '/reports/new-business' %}active{% endif %}">New Business</a>
-    <a href="/reports/plus-europe" class="{% if report_path == '/reports/plus-europe' %}active{% endif %}">Plus Europe</a>
+    <a href="/reports/plus-europe" class="{% if report_path == '/reports/plus-europe' %}active{% endif %}">Europe</a>
     <a href="/reports/weekend-trips" class="{% if report_path == '/reports/weekend-trips' %}active{% endif %}">Weekend Trips</a>
     <a href="/reports/summary" class="{% if report_path == '/reports/summary' %}active{% endif %}">Summary</a>
   </div>
@@ -19,8 +19,27 @@
 {# ── Filters ── #}
 <div class="card">
   <div class="card-inner">
-    <form class="toolbar" method="get" action="{{ report_path }}">
+    <form class="toolbar {% if report_path == '/reports/plus-europe' %}europe-filters-auto{% endif %}" method="get" action="{{ report_path }}">
       <div class="filters">
+        {% if 'direction' in filters %}
+        <label class="direction-picker-label direction-picker-top">
+          Direction
+          <div class="direction-picker" role="radiogroup" aria-label="Direction">
+            <label class="tick-option">
+              <input type="radio" name="direction" value="outbound" {% if filters.get('direction', 'outbound') == 'outbound' %}checked{% endif %}>
+              <span>Outbound</span>
+            </label>
+            <label class="tick-option">
+              <input type="radio" name="direction" value="inbound" {% if filters.get('direction') == 'inbound' %}checked{% endif %}>
+              <span>Inbound</span>
+            </label>
+            <label class="tick-option">
+              <input type="radio" name="direction" value="both" {% if filters.get('direction') == 'both' %}checked{% endif %}>
+              <span>Both</span>
+            </label>
+          </div>
+        </label>
+        {% endif %}
         {% if 'origin' in filters %}
         <label>
           Origin
@@ -31,16 +50,32 @@
           </select>
         </label>
         {% endif %}
-        {% if 'direction' in filters %}
+        {% if destination_options %}
         <label>
-          Direction
-          <select name="direction">
-            {% if report_path == '/reports/plus-europe' %}
-            <option value="" {% if not filters.get('direction') %}selected{% endif %}>All</option>
-            {% endif %}
-            <option value="outbound" {% if filters.get('direction') == 'outbound' %}selected{% endif %}>Outbound</option>
-            <option value="inbound" {% if filters.get('direction') == 'inbound' %}selected{% endif %}>Inbound</option>
+          Destination
+          <select name="destination">
+            <option value="">All</option>
+            {% for city_name, airport_code in destination_options %}
+            <option value="{{ airport_code }}" {% if filters.get('destination') == airport_code %}selected{% endif %}>
+              {{ airport_code }} · {{ city_name }}
+            </option>
+            {% endfor %}
           </select>
+        </label>
+        {% endif %}
+        {% if report_path == '/reports/plus-europe' %}
+        <label class="europe-class-filter">
+          Class
+          <span class="europe-class-options">
+            <label class="tick-option">
+              <input type="checkbox" name="class_economy" value="1" {% if filters.get('class_economy') %}checked{% endif %}>
+              <span>Economy</span>
+            </label>
+            <label class="tick-option">
+              <input type="checkbox" name="class_plus_business" value="1" {% if filters.get('class_plus_business') %}checked{% endif %}>
+              <span>Plus &amp; Business</span>
+            </label>
+          </span>
         </label>
         {% endif %}
         {% if 'min_seats' in filters %}
@@ -49,19 +84,56 @@
           <input type="number" name="min_seats" min="1" value="{{ filters.get('min_seats', 2) }}">
         </label>
         {% endif %}
+        {% if report_path != '/reports/plus-europe' %}
         <button type="submit">Apply</button>
+        {% endif %}
       </div>
     </form>
   </div>
 </div>
 
 {# ── Primary chart ── #}
-{% if chart_data and chart_data.labels %}
+{% if chart_data and chart_data.labels and report_path != '/reports/plus-europe' %}
 <div class="card">
   <div class="card-inner">
     <p class="table-hint" style="margin:0 0 1rem;">{{ subtitle }}</p>
     <div style="position:relative;height:380px;">
       <canvas id="primaryChart"></canvas>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if report_path == '/reports/plus-europe' and plus_year_calendar %}
+<div class="card">
+  <div class="card-inner">
+    <h3 class="card-section-title">365-day Europe calendar</h3>
+    <p class="table-hint" style="margin:0 0 1rem;">
+      Daily available seats per direction.
+      <span class="calendar-legend-out">Outbound</span>
+      <span class="calendar-legend-in">Inbound</span>
+    </p>
+    <div class="year-cal-grid">
+      {% for month in plus_year_calendar %}
+      <section class="month-card">
+        <div class="month-label">{{ month.label }}</div>
+        <div class="month-days">
+          {% for day in month.days %}
+          <div class="calendar-day {% if day.has_data %}has-data is-clickable plus-day-clickable{% endif %} {% if day.is_today %}is-today{% endif %}" {% if day.has_data %}data-day="{{ day.iso }}"{% endif %}>
+            <div class="calendar-day-num">{{ day.day }}</div>
+            <div class="calendar-dual-badges">
+              {% if day.outbound > 0 %}
+              <span class="calendar-day-badge calendar-day-badge-out">{{ day.outbound }}</span>
+              {% endif %}
+              {% if day.inbound > 0 %}
+              <span class="calendar-day-badge calendar-day-badge-in">{{ day.inbound }}</span>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </section>
+      {% endfor %}
     </div>
   </div>
 </div>
@@ -80,7 +152,9 @@
 {% endif %}
 
 {# ── Data table ── #}
-{% if table_rows %}
+{% if report_path == '/reports/plus-europe' %}
+{# For Plus Europe, replace large detail table with 365-day calendar above. #}
+{% elif table_rows %}
 <div class="card">
   <div class="card-inner">
     <h3 class="card-section-title">Detail <span class="count">({{ table_rows|length }})</span></h3>
@@ -109,6 +183,23 @@
 </div>
 {% endif %}
 
+{% endif %}
+
+{% if report_path == '/reports/plus-europe' %}
+<div id="plus-day-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="plus-day-title" hidden>
+  <div class="modal-backdrop"></div>
+  <div class="modal-content plus-day-modal-content">
+    <div class="modal-header">
+      <h2 id="plus-day-title" class="modal-title">Flight details</h2>
+      <button type="button" class="modal-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="plus-day-loading">Loading…</div>
+      <div id="plus-day-error" class="modal-error" style="display:none;"></div>
+      <div id="plus-day-detail" style="display:none;"></div>
+    </div>
+  </div>
+</div>
 {% endif %}
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
@@ -172,4 +263,162 @@
   {% endif %}
 })();
 </script>
+{% if report_path == '/reports/plus-europe' %}
+<script>
+(function() {
+  var modal = document.getElementById('plus-day-modal');
+  if (!modal) return;
+
+  var loadingEl = document.getElementById('plus-day-loading');
+  var errorEl = document.getElementById('plus-day-error');
+  var detailEl = document.getElementById('plus-day-detail');
+
+  function showModal() { modal.removeAttribute('hidden'); }
+  function hideModal() { modal.setAttribute('hidden', ''); }
+  function showLoading() {
+    loadingEl.style.display = 'block';
+    errorEl.style.display = 'none';
+    detailEl.style.display = 'none';
+  }
+  function showError(msg) {
+    loadingEl.style.display = 'none';
+    detailEl.style.display = 'none';
+    errorEl.style.display = 'block';
+    errorEl.textContent = msg;
+  }
+
+  function normalizeFlights(raw) {
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw;
+    if (Array.isArray(raw.flights)) return raw.flights;
+    if (raw.data && Array.isArray(raw.data.flights)) return raw.data.flights;
+    return [];
+  }
+  function hhmm(v) {
+    if (!v) return '-';
+    return v.length > 5 ? v.slice(11, 16) : v;
+  }
+  function routeMeta(f) {
+    var stops = typeof f.numberOfStops === 'number' ? f.numberOfStops : null;
+    var duration = f.duration || f.totalDuration || f.flightDuration || '';
+    var stopLabel = stops === null ? '' : (stops === 0 ? 'Direkt' : (stops + ' stop'));
+    if (stopLabel && duration) return stopLabel + ', ' + duration;
+    return stopLabel || duration || '-';
+  }
+  function cabin(v) { return (v === undefined || v === null) ? '0' : String(v); }
+
+  function renderFlightRows(flights) {
+    if (!flights.length) return '<div class="table-hint" style="margin:0.5rem 0;">No flights.</div>';
+    return '<div class="plus-flight-list">' + flights.map(function(f) {
+      var av = f.availability || {};
+      return (
+        '<div class="plus-flight-row">' +
+          '<div class="plus-flight-time">' + hhmm(f.departureTime) + '-' + hhmm(f.arrivalTime) + '</div>' +
+          '<div class="plus-flight-meta">' + routeMeta(f) + '</div>' +
+          '<div class="plus-flight-cabins">' +
+            '<span class="plus-cabin plus-cabin-y">Y ' + cabin(av.AG) + '</span>' +
+            '<span class="plus-cabin plus-cabin-p">P ' + cabin(av.AP) + '</span>' +
+            '<span class="plus-cabin plus-cabin-j">J ' + cabin(av.AB) + '</span>' +
+          '</div>' +
+        '</div>'
+      );
+    }).join('') + '</div>';
+  }
+
+  function showDetail(payload) {
+    loadingEl.style.display = 'none';
+    errorEl.style.display = 'none';
+    detailEl.style.display = 'block';
+
+    var outFlights = normalizeFlights(payload.outbound);
+    var inFlights = normalizeFlights(payload.inbound);
+    var title = payload.origin + ' ↔ ' + payload.destination + ' · ' + payload.day;
+
+    detailEl.innerHTML =
+      '<p class="table-hint" style="margin:0 0 0.8rem;">' + title + '</p>' +
+      '<div class="plus-legend">' +
+        '<span class="plus-cabin plus-cabin-y">Y Economy</span>' +
+        '<span class="plus-cabin plus-cabin-p">P Premium</span>' +
+        '<span class="plus-cabin plus-cabin-j">J Business</span>' +
+      '</div>' +
+      '<div class="plus-day-sections">' +
+        '<section class="plus-day-section"><h3 class="card-section-title">Outbound ' + payload.origin + ' → ' + payload.destination + '</h3>' + renderFlightRows(outFlights) + '</section>' +
+        '<section class="plus-day-section"><h3 class="card-section-title">Inbound ' + payload.destination + ' → ' + payload.origin + '</h3>' + renderFlightRows(inFlights) + '</section>' +
+      '</div>';
+  }
+
+  function openDay(day) {
+    var originEl = document.querySelector('select[name="origin"]');
+    var destEl = document.querySelector('select[name="destination"]');
+    var origin = originEl ? originEl.value : '';
+    var destination = destEl ? destEl.value : '';
+    if (!origin || !destination) {
+      showModal();
+      showError('Choose both origin and destination to view day flight details.');
+      return;
+    }
+    showModal();
+    showLoading();
+    var url = '/api/plus-day-routes?origin=' + encodeURIComponent(origin) +
+      '&destination=' + encodeURIComponent(destination) +
+      '&day=' + encodeURIComponent(day);
+    fetch(url)
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.error) throw new Error(data.error);
+        if (data.outbound && data.outbound._error) throw new Error(data.outbound._error);
+        if (data.inbound && data.inbound._error) throw new Error(data.inbound._error);
+        showDetail(data);
+      })
+      .catch(function(err) {
+        showError(err.message || 'Failed to load flight details');
+      });
+  }
+
+  document.querySelectorAll('.plus-day-clickable').forEach(function(el) {
+    el.addEventListener('click', function() {
+      if (!el.dataset.day) return;
+      openDay(el.dataset.day);
+    });
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && !modal.hasAttribute('hidden')) {
+      hideModal();
+    }
+  });
+
+  modal.querySelector('.modal-close').addEventListener('click', hideModal);
+  modal.querySelector('.modal-backdrop').addEventListener('click', hideModal);
+})();
+</script>
+{% endif %}
+{% if report_path == '/reports/plus-europe' %}
+<script>
+(function() {
+  var form = document.querySelector('form.europe-filters-auto');
+  if (!form) return;
+
+  function ensureOneClassChecked(changed) {
+    var eco = form.querySelector('input[name="class_economy"]');
+    var prem = form.querySelector('input[name="class_plus_business"]');
+    if (!eco || !prem) return;
+    if (!eco.checked && !prem.checked) {
+      if (changed === eco) prem.checked = true;
+      else eco.checked = true;
+    }
+  }
+
+  form.querySelectorAll('select, input[type="number"]').forEach(function(el) {
+    el.addEventListener('change', function() { form.submit(); });
+  });
+  form.querySelectorAll('input[type="checkbox"][name="class_economy"], input[type="checkbox"][name="class_plus_business"]').forEach(function(el) {
+    el.addEventListener('change', function() {
+      ensureOneClassChecked(el);
+      form.submit();
+    });
+  });
+})();
+</script>
+{% endif %}
 {% endblock %}
