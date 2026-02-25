@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Reports – SAS Awards{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Reports</h1>
+</div>
+
+<div class="card">
+  <div class="card-inner">
+    <h3 class="card-section-title">Flight Availability Reports</h3>
+    <p class="table-hint" style="margin-top:0;margin-bottom:1.25rem;">
+      Visual reports mirroring the daily CSV scripts. Each page shows interactive
+      charts and filterable data tables.
+    </p>
+    <div class="view-grid">
+      <a href="/reports/business-by-date" class="view-card">
+        <span class="view-card-label">Business by Date</span>
+        <span class="view-card-desc">Business seats aggregated by date per origin. Bar chart + detail table.</span>
+      </a>
+      <a href="/reports/new-business" class="view-card">
+        <span class="view-card-label">New Business</span>
+        <span class="view-card-desc">Business flights that appeared since yesterday. Requires flight history.</span>
+      </a>
+      <a href="/reports/plus-europe" class="view-card">
+        <span class="view-card-label">Plus Europe</span>
+        <span class="view-card-desc">Plus-class availability across European cities with timeline.</span>
+      </a>
+      <a href="/reports/weekend-trips" class="view-card">
+        <span class="view-card-label">Weekend Trips</span>
+        <span class="view-card-desc">Cities ranked by number of bookable weekend pairs (3–4 days).</span>
+      </a>
+      <a href="/reports/summary" class="view-card">
+        <span class="view-card-label">Morning Summary</span>
+        <span class="view-card-desc">Dashboard overview: counts, top business, top weekend cities.</span>
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}

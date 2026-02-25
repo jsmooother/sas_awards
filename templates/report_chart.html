@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} – SAS Awards{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">{{ title }}</h1>
+  <div class="tabs">
+    <a href="/reports/business-by-date" class="{% if report_path == '/reports/business-by-date' %}active{% endif %}">Business by Date</a>
+    <a href="/reports/new-business" class="{% if report_path == '/reports/new-business' %}active{% endif %}">New Business</a>
+    <a href="/reports/plus-europe" class="{% if report_path == '/reports/plus-europe' %}active{% endif %}">Plus Europe</a>
+    <a href="/reports/weekend-trips" class="{% if report_path == '/reports/weekend-trips' %}active{% endif %}">Weekend Trips</a>
+    <a href="/reports/summary" class="{% if report_path == '/reports/summary' %}active{% endif %}">Summary</a>
+  </div>
+</div>
+
+{% if message %}
+<div class="msg">{{ message }}</div>
+{% else %}
+
+{# ── Filters ── #}
+<div class="card">
+  <div class="card-inner">
+    <form class="toolbar" method="get" action="{{ report_path }}">
+      <div class="filters">
+        {% if 'origin' in filters %}
+        <label>
+          Origin
+          <select name="origin">
+            <option value="">All</option>
+            <option value="ARN" {% if filters.get('origin') == 'ARN' %}selected{% endif %}>ARN</option>
+            <option value="CPH" {% if filters.get('origin') == 'CPH' %}selected{% endif %}>CPH</option>
+          </select>
+        </label>
+        {% endif %}
+        {% if 'direction' in filters %}
+        <label>
+          Direction
+          <select name="direction">
+            {% if report_path == '/reports/plus-europe' %}
+            <option value="" {% if not filters.get('direction') %}selected{% endif %}>All</option>
+            {% endif %}
+            <option value="outbound" {% if filters.get('direction') == 'outbound' %}selected{% endif %}>Outbound</option>
+            <option value="inbound" {% if filters.get('direction') == 'inbound' %}selected{% endif %}>Inbound</option>
+          </select>
+        </label>
+        {% endif %}
+        {% if 'min_seats' in filters %}
+        <label>
+          Min seats
+          <input type="number" name="min_seats" min="1" value="{{ filters.get('min_seats', 2) }}">
+        </label>
+        {% endif %}
+        <button type="submit">Apply</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{# ── Primary chart ── #}
+{% if chart_data and chart_data.labels %}
+<div class="card">
+  <div class="card-inner">
+    <p class="table-hint" style="margin:0 0 1rem;">{{ subtitle }}</p>
+    <div style="position:relative;height:380px;">
+      <canvas id="primaryChart"></canvas>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# ── Secondary chart (optional, e.g. timeline) ── #}
+{% if secondary_chart_data is defined and secondary_chart_data and secondary_chart_data.labels %}
+<div class="card">
+  <div class="card-inner">
+    <h3 class="card-section-title">{{ secondary_chart_title }}</h3>
+    <div style="position:relative;height:300px;">
+      <canvas id="secondaryChart"></canvas>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# ── Data table ── #}
+{% if table_rows %}
+<div class="card">
+  <div class="card-inner">
+    <h3 class="card-section-title">Detail <span class="count">({{ table_rows|length }})</span></h3>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            {% for col in table_columns %}<th>{{ col }}</th>{% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in table_rows %}
+          <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="table-hint">Showing {{ table_rows|length }} rows (max 500).</p>
+  </div>
+</div>
+{% elif not message %}
+<div class="card">
+  <div class="card-inner">
+    <p class="table-hint">No data matching current filters.</p>
+  </div>
+</div>
+{% endif %}
+
+{% endif %}
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+  var COLORS = [
+    'rgba(0,122,255,0.7)', 'rgba(255,149,0,0.7)', 'rgba(52,199,89,0.7)',
+    'rgba(255,59,48,0.7)', 'rgba(175,82,222,0.7)', 'rgba(90,200,250,0.7)'
+  ];
+  var BORDERS = [
+    'rgba(0,122,255,1)', 'rgba(255,149,0,1)', 'rgba(52,199,89,1)',
+    'rgba(255,59,48,1)', 'rgba(175,82,222,1)', 'rgba(90,200,250,1)'
+  ];
+
+  function createChart(canvasId, type, rawData) {
+    var el = document.getElementById(canvasId);
+    if (!el || !rawData || !rawData.labels || !rawData.labels.length) return;
+    var datasets = rawData.datasets.map(function(ds, i) {
+      return {
+        label: ds.label,
+        data: ds.data,
+        backgroundColor: COLORS[i % COLORS.length],
+        borderColor: BORDERS[i % BORDERS.length],
+        borderWidth: type === 'line' ? 2 : 1,
+        fill: type === 'line' ? 'origin' : undefined,
+        tension: 0.3,
+        pointRadius: type === 'line' ? 1 : undefined,
+      };
+    });
+    new Chart(el, {
+      type: type,
+      data: { labels: rawData.labels, datasets: datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: datasets.length > 1 },
+        },
+        scales: {
+          x: {
+            ticks: {
+              maxRotation: 45,
+              autoSkip: true,
+              maxTicksLimit: type === 'line' ? 30 : 40,
+              font: { size: 11 },
+            },
+          },
+          y: { beginAtZero: true },
+        },
+      },
+    });
+  }
+
+  var primaryData = {{ chart_data | tojson }};
+  createChart('primaryChart', '{{ chart_type }}', primaryData);
+
+  {% if secondary_chart_data is defined and secondary_chart_data %}
+  var secondaryData = {{ secondary_chart_data | tojson }};
+  createChart('secondaryChart', '{{ secondary_chart_type }}', secondaryData);
+  {% endif %}
+})();
+</script>
+{% endblock %}

@@ -215,6 +215,15 @@
         <a href="/weekend" class="{% if request.path == '/weekend' %}active{% endif %}"><span class="sidebar-icon">▸</span> Weekend</a>
         <a href="/new" class="{% if request.path == '/new' %}active{% endif %}"><span class="sidebar-icon">▸</span> New today</a>
       </div>
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">Reports</div>
+        <a href="/reports" class="{% if request.path == '/reports' %}active{% endif %}"><span class="sidebar-icon">◆</span> All Reports</a>
+        <a href="/reports/business-by-date" class="{% if request.path == '/reports/business-by-date' %}active{% endif %}"><span class="sidebar-icon">▸</span> Business by Date</a>
+        <a href="/reports/new-business" class="{% if request.path == '/reports/new-business' %}active{% endif %}"><span class="sidebar-icon">▸</span> New Business</a>
+        <a href="/reports/plus-europe" class="{% if request.path == '/reports/plus-europe' %}active{% endif %}"><span class="sidebar-icon">▸</span> Plus Europe</a>
+        <a href="/reports/weekend-trips" class="{% if request.path == '/reports/weekend-trips' %}active{% endif %}"><span class="sidebar-icon">▸</span> Weekend Trips</a>
+        <a href="/reports/summary" class="{% if request.path == '/reports/summary' %}active{% endif %}"><span class="sidebar-icon">▸</span> Morning Summary</a>
+      </div>
     </aside>
     <main class="main">
       {% block content %}{% endblock %}

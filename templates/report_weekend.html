@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} – SAS Awards{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">{{ title }}</h1>
+  <div class="tabs">
+    <a href="/reports/business-by-date">Business by Date</a>
+    <a href="/reports/new-business">New Business</a>
+    <a href="/reports/plus-europe">Plus Europe</a>
+    <a href="/reports/weekend-trips" class="active">Weekend Trips</a>
+    <a href="/reports/summary">Summary</a>
+  </div>
+</div>
+
+{# ── Filters ── #}
+<div class="card">
+  <div class="card-inner">
+    <form class="toolbar" method="get" action="/reports/weekend-trips">
+      <div class="filters">
+        <label>
+          Origin
+          <select name="origin">
+            <option value="">All</option>
+            <option value="ARN" {% if filters.get('origin') == 'ARN' %}selected{% endif %}>ARN</option>
+            <option value="CPH" {% if filters.get('origin') == 'CPH' %}selected{% endif %}>CPH</option>
+          </select>
+        </label>
+        <button type="submit">Apply</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{# ── Summary stats ── #}
+{% if origin_summary %}
+<div class="card">
+  <div class="card-inner">
+    <div class="stat-row">
+      {% for o, s in origin_summary.items() %}
+      <div class="stat-item">
+        <div class="stat-label">{{ o }}</div>
+        <div class="stat-value">{{ s.cities }}</div>
+        <div class="stat-sublabel">cities · {{ s.pairs }} pairs</div>
+      </div>
+      {% endfor %}
+      <div class="stat-item stat-item-total">
+        <div class="stat-label">Total</div>
+        <div class="stat-value">{{ city_rows|length }}</div>
+        <div class="stat-sublabel">city-origin combos</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# ── Chart ── #}
+{% if chart_data and chart_data.labels %}
+<div class="card">
+  <div class="card-inner">
+    <p class="table-hint" style="margin:0 0 1rem;">{{ subtitle }}</p>
+    <div style="position:relative;height:420px;">
+      <canvas id="weekendChart"></canvas>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# ── City table ── #}
+{% if city_rows %}
+<div class="card">
+  <div class="card-inner">
+    <h3 class="card-section-title">All Cities <span class="count">({{ city_rows|length }})</span></h3>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Origin</th><th>City</th><th>Code</th><th>Pairs</th>
+            <th>Earliest Out</th><th>Latest In</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in city_rows %}
+          <tr>
+            <td>{{ row[0] }}</td>
+            <td>{{ row[1] }}</td>
+            <td>{{ row[2] }}</td>
+            <td>{{ row[3] }}</td>
+            <td>{{ row[4] }}</td>
+            <td>{{ row[5] }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="card">
+  <div class="card-inner">
+    <p class="table-hint">No weekend pairs found with current filters.</p>
+  </div>
+</div>
+{% endif %}
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+  var data = {{ chart_data | tojson }};
+  var el = document.getElementById('weekendChart');
+  if (!el || !data || !data.labels || !data.labels.length) return;
+  new Chart(el, {
+    type: 'bar',
+    data: {
+      labels: data.labels,
+      datasets: [{
+        label: 'Weekend Pairs',
+        data: data.datasets[0].data,
+        backgroundColor: 'rgba(0,122,255,0.7)',
+        borderColor: 'rgba(0,122,255,1)',
+        borderWidth: 1,
+      }],
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { beginAtZero: true, title: { display: true, text: 'Number of Pairs' } },
+        y: { ticks: { font: { size: 11 } } },
+      },
+    },
+  });
+})();
+</script>
+{% endblock %}
