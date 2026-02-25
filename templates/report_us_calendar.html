@@ -107,8 +107,36 @@
 </style>
 
 <div class="page-header">
-  <h1 class="page-title">ARN → US Weekend Calendar</h1>
-  <p class="cal-subtitle">Business &amp; Plus class · Outbound Wed–Fri · Inbound Sat–Mon · 3–4 day trips</p>
+  <h1 class="page-title">ARN → US Flight Calendar</h1>
+  <p class="cal-subtitle">Business &amp; Plus class · ≥{{ "2" }} seats · {{ filters.min_days }}–{{ filters.max_days }} day trips</p>
+</div>
+
+{# ── Filters ── #}
+<div class="card">
+  <div class="card-inner">
+    <form class="toolbar" method="get" action="/reports/us-calendar">
+      <div class="filters">
+        <label>
+          City
+          <select name="city">
+            <option value="">All US</option>
+            {% for cname, ccode in all_us_cities %}
+            <option value="{{ ccode }}" {% if filters.city == ccode %}selected{% endif %}>{{ cname }} ({{ ccode }})</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          Min days
+          <input type="number" name="min_days" min="1" max="30" value="{{ filters.min_days }}" style="width:70px;">
+        </label>
+        <label>
+          Max days
+          <input type="number" name="max_days" min="1" max="30" value="{{ filters.max_days }}" style="width:70px;">
+        </label>
+        <button type="submit">Apply</button>
+      </div>
+    </form>
+  </div>
 </div>
 
 {# ── Legend + stats ── #}
@@ -126,8 +154,8 @@
     <div id="calendar" class="year-grid"></div>
     {% if not pairs %}
     <div class="no-pairs-msg">
-      No ARN → US weekend pairs with ≥2 Business or Plus seats found.<br>
-      Run <code>python update_sas_awards.py</code> to refresh data.
+      No ARN → US pairs with ≥2 Business or Plus seats found for {{ filters.min_days }}–{{ filters.max_days }} day trips.<br>
+      Try adjusting the filters or run <code>python update_sas_awards.py</code> to refresh data.
     </div>
     {% endif %}
   </div>

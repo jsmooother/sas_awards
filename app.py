@@ -793,12 +793,34 @@ def report_summary():
 
 @app.route("/reports/us-calendar")
 def report_us_calendar():
-    """ARN → US weekend pairs in Business/Plus on a 365-day calendar view."""
+    """ARN → US flight pairs in Business/Plus on a 365-day calendar view."""
+    args = request.args
     year = _dt.date.today().year
+    min_days = int(args.get("min_days", 3))
+    max_days = int(args.get("max_days", 10))
+    city_filter = args.get("city", "")
+
     conn = get_conn()
     cur = conn.cursor()
 
-    cur.execute("""
+    conditions = [
+        "inb.direction = 'inbound'",
+        "outb.direction = 'outbound'",
+        "inb.origin = 'ARN'",
+        "inb.country_name = 'USA'",
+        "(outb.ab >= ? OR outb.ap >= ?)",
+        "(inb.ab >= ? OR inb.ap >= ?)",
+        "(julianday(inb.date) - julianday(outb.date)) BETWEEN ? AND ?",
+        "date(inb.date) BETWEEN date('now') AND date('now','+1 year')",
+    ]
+    params = [MIN_SEATS, MIN_SEATS, MIN_SEATS, MIN_SEATS, min_days, max_days]
+
+    if city_filter:
+        conditions.append("outb.airport_code = ?")
+        params.append(city_filter)
+
+    where = " AND ".join(conditions)
+    cur.execute(f"""
         SELECT
             outb.city_name, outb.airport_code,
             outb.date, inb.date,
@@ -807,17 +829,9 @@ def report_us_calendar():
         FROM flights AS inb
         JOIN flights AS outb
           ON inb.airport_code = outb.airport_code AND inb.origin = outb.origin
-        WHERE inb.direction = 'inbound' AND outb.direction = 'outbound'
-          AND inb.origin = 'ARN'
-          AND inb.country_name = 'USA'
-          AND (outb.ab >= ? OR outb.ap >= ?)
-          AND (inb.ab >= ? OR inb.ap >= ?)
-          AND strftime('%w', inb.date) IN ('6','0','1')
-          AND strftime('%w', outb.date) IN ('3','4','5')
-          AND (julianday(inb.date) - julianday(outb.date)) BETWEEN ? AND ?
-          AND date(inb.date) BETWEEN date('now') AND date('now','+1 year')
+        WHERE {where}
         ORDER BY outb.date, outb.city_name
-    """, (MIN_SEATS, MIN_SEATS, MIN_SEATS, MIN_SEATS, TRIP_DAYS_MIN, TRIP_DAYS_MAX))
+    """, params)
 
     pairs = []
     for i, r in enumerate(cur.fetchall()):
@@ -828,12 +842,22 @@ def report_us_calendar():
             "plus_in": r[6], "biz_in": r[7],
         })
 
+    all_cities_cur = conn.execute("""
+        SELECT DISTINCT city_name, airport_code FROM flights
+        WHERE origin = 'ARN' AND country_name = 'USA'
+          AND (ab >= ? OR ap >= ?) AND date >= date('now')
+        ORDER BY city_name
+    """, (MIN_SEATS, MIN_SEATS))
+    all_us_cities = [(r[0], r[1]) for r in all_cities_cur.fetchall()]
+
     cities = sorted(set(p["code"] for p in pairs))
     conn.close()
 
     return render_template(
         "report_us_calendar.html",
         pairs=pairs, cities=cities, year=year,
+        all_us_cities=all_us_cities,
+        filters={"min_days": min_days, "max_days": max_days, "city": city_filter},
     )
 
 
