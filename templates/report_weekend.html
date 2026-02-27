@@ -250,7 +250,17 @@
       '</p>';
     var outCal = buildCalendarHtml('Outbound availability (pairs per departure date)', data.outbound_daily_pairs || {}, 'outbound');
     var inCal = buildCalendarHtml('Inbound availability (pairs per return date)', data.inbound_daily_pairs || {}, 'inbound');
-    detailEl.innerHTML = header + outCal + inCal;
+    detailEl.innerHTML =
+      header +
+      '<label class="search-label weekend-calendar-mode-label">' +
+      'Calendar mode' +
+      '<select id="weekend-calendar-mode">' +
+      '<option value="outbound" selected>Outbound</option>' +
+      '<option value="inbound">Inbound</option>' +
+      '</select>' +
+      '</label>' +
+      '<div id="weekend-calendar-pane-outbound">' + outCal + '</div>' +
+      '<div id="weekend-calendar-pane-inbound" hidden>' + inCal + '</div>';
   }
 
   function openModal(origin, airportCode) {
@@ -297,6 +307,19 @@
     if (!dayEl) return;
     openDayPairs(dayEl.dataset.day, dayEl.dataset.mode);
   });
+  detailEl.addEventListener('change', function(e) {
+    if (e.target.id !== 'weekend-calendar-mode') return;
+    var outPane = document.getElementById('weekend-calendar-pane-outbound');
+    var inPane = document.getElementById('weekend-calendar-pane-inbound');
+    if (!outPane || !inPane) return;
+    if (e.target.value === 'inbound') {
+      outPane.hidden = true;
+      inPane.hidden = false;
+    } else {
+      outPane.hidden = false;
+      inPane.hidden = true;
+    }
+  });
 
   modal.querySelector('.modal-close').addEventListener('click', hideModal);
   modal.querySelector('.modal-backdrop').addEventListener('click', hideModal);
@@ -305,5 +328,6 @@
 <style>
   .weekend-back-btn { margin-bottom: 0.8rem; }
   .weekend-modal-headline { margin: 0 0 0.85rem; }
+  .weekend-calendar-mode-label { margin: 0 0 0.85rem; max-width: 220px; }
 </style>
 {% endblock %}

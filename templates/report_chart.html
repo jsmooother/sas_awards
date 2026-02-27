@@ -93,7 +93,16 @@
 </div>
 
 {# ── Primary chart ── #}
-{% if chart_data and chart_data.labels and report_path != '/reports/plus-europe' %}
+{% if report_path == '/reports/new-business' %}
+<div class="card">
+  <div class="card-inner">
+    <h3 class="card-section-title">New flights map</h3>
+    <p class="table-hint table-hint-compact">Zoom and pan to inspect cities. Marker labels show number of new flights.</p>
+    <div id="new-business-map" class="report-map-wrap"></div>
+    <p id="new-business-map-status" class="table-hint report-map-status">Loading city coordinates…</p>
+  </div>
+</div>
+{% elif chart_data and chart_data.labels and report_path != '/reports/plus-europe' %}
 <div class="card">
   <div class="card-inner">
     <p class="table-hint table-hint-compact">{{ subtitle }}</p>
@@ -203,8 +212,107 @@
 {% endif %}
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+{% if report_path == '/reports/new-business' %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+{% endif %}
 <script>
 (function() {
+  {% if report_path == '/reports/new-business' %}
+  var mapEl = document.getElementById('new-business-map');
+  var mapStatusEl = document.getElementById('new-business-map-status');
+  var mapPoints = {{ map_points | default([], true) | tojson }};
+  if (mapEl && typeof L !== 'undefined' && mapPoints.length) {
+    var map = L.map(mapEl, { zoomControl: true }).setView([54.5, 15], 4);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    var bounds = L.latLngBounds([]);
+    var pending = mapPoints.length;
+    var located = 0;
+
+    function cacheKey(code) { return 'sas_awards_geo_' + code; }
+    function getCachedCoord(code) {
+      try {
+        var raw = localStorage.getItem(cacheKey(code));
+        if (!raw) return null;
+        var parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed) || parsed.length !== 2) return null;
+        return parsed;
+      } catch (e) { return null; }
+    }
+    function setCachedCoord(code, lat, lon) {
+      try { localStorage.setItem(cacheKey(code), JSON.stringify([lat, lon])); } catch (e) {}
+    }
+    function finish() {
+      pending -= 1;
+      if (pending > 0) return;
+      if (located > 0) {
+        map.fitBounds(bounds.pad(0.25));
+        mapStatusEl.textContent = 'Showing ' + located + ' of ' + mapPoints.length + ' cities.';
+      } else {
+        mapStatusEl.textContent = 'Could not resolve city coordinates. Try again in a moment.';
+      }
+    }
+
+    function addMarker(point, lat, lon) {
+      var radius = Math.max(7, Math.min(18, 6 + point.flights));
+      var marker = L.circleMarker([lat, lon], {
+        radius: radius,
+        color: '#0051d5',
+        weight: 1,
+        fillColor: '#007aff',
+        fillOpacity: 0.78
+      }).addTo(map);
+      marker.bindTooltip(String(point.flights), {
+        permanent: true,
+        direction: 'center',
+        className: 'report-map-count-tooltip'
+      });
+      marker.bindPopup(
+        '<strong>' + point.city + ' (' + point.code + ')</strong><br>' +
+        'New flights: ' + point.flights + '<br>' +
+        'Business seats: ' + point.seats
+      );
+      bounds.extend([lat, lon]);
+      located += 1;
+    }
+
+    async function geocodePoint(point) {
+      var cached = getCachedCoord(point.code);
+      if (cached) {
+        addMarker(point, cached[0], cached[1]);
+        finish();
+        return;
+      }
+      var queries = [point.code + ' airport', point.city + ' airport', point.city];
+      for (var i = 0; i < queries.length; i++) {
+        try {
+          var resp = await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=' + encodeURIComponent(queries[i]));
+          var data = await resp.json();
+          if (Array.isArray(data) && data.length > 0) {
+            var lat = Number(data[0].lat);
+            var lon = Number(data[0].lon);
+            if (!Number.isNaN(lat) && !Number.isNaN(lon)) {
+              setCachedCoord(point.code, lat, lon);
+              addMarker(point, lat, lon);
+              break;
+            }
+          }
+        } catch (e) {}
+      }
+      finish();
+    }
+
+    mapPoints.forEach(function(point) { geocodePoint(point); });
+  } else if (mapStatusEl) {
+    mapStatusEl.textContent = mapPoints.length ? 'Map library could not load.' : 'No new flights to map.';
+  }
+  {% endif %}
+
+  if (typeof Chart === 'undefined') return;
   var styles = getComputedStyle(document.documentElement);
   function token(name, fallback) {
     var value = styles.getPropertyValue(name);

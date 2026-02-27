@@ -842,15 +842,29 @@ def report_new_business():
     table_rows = cur.fetchall()
 
     city_counts = {}
+    city_seat_counts = {}
     for origin, city, code, date, ab in table_rows:
         key = f"{city} ({code})"
-        city_counts[key] = city_counts.get(key, 0) + ab
+        city_counts[key] = city_counts.get(key, 0) + 1
+        city_seat_counts[key] = city_seat_counts.get(key, 0) + ab
 
     sorted_cities = sorted(city_counts.items(), key=lambda x: -x[1])[:30]
     chart_data = {
         "labels": [c[0] for c in sorted_cities],
-        "datasets": [{"label": "New Business Seats", "data": [c[1] for c in sorted_cities]}],
+        "datasets": [{"label": "New Flights", "data": [c[1] for c in sorted_cities]}],
     }
+    map_points = []
+    for city_code, flights in sorted(city_counts.items(), key=lambda x: (-x[1], x[0])):
+        city, code = city_code.rsplit(" (", 1)
+        code = code.rstrip(")")
+        map_points.append(
+            {
+                "city": city,
+                "code": code,
+                "flights": flights,
+                "seats": city_seat_counts.get(city_code, 0),
+            }
+        )
     conn.close()
 
     return render_template(
@@ -862,6 +876,7 @@ def report_new_business():
         table_rows=table_rows,
         table_columns=["Origin", "City", "Code", "Date", "Business"],
         filters={"direction": direction, "min_seats": min_seats},
+        map_points=map_points,
         report_path="/reports/new-business",
     )
 
