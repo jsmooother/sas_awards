@@ -572,6 +572,10 @@
         <a href="/reports/summary" class="{% if request.path == '/reports/summary' %}active{% endif %}"><span class="sidebar-icon">▸</span> Morning Summary</a>
         <a href="/reports/us-calendar" class="{% if request.path == '/reports/us-calendar' %}active{% endif %}"><span class="sidebar-icon">▸</span> US Calendar</a>
       </div>
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">Partner Awards</div>
+        <a href="/partner-awards" class="{% if request.path == '/partner-awards' %}active{% endif %}"><span class="sidebar-icon">◆</span> Partner Awards</a>
+      </div>
     </aside>
     <main class="main">
       {% block content %}{% endblock %}

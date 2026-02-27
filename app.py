@@ -16,6 +16,10 @@ DB_PATH = os.path.expanduser(os.environ.get("SAS_DB_PATH", "~/sas_awards/sas_awa
 
 from report_config import MIN_SEATS, TRIP_DAYS_MIN, TRIP_DAYS_MAX
 
+from partner_awards.airfrance.routes import bp as partner_awards_airfrance_bp
+
+app.register_blueprint(partner_awards_airfrance_bp)
+
 EUROPE_COUNTRIES = (
     "Österrike", "Belgien", "Danmark", "Frankrike", "Tyskland",
     "Irland", "Italien", "Nederländerna", "Norge",
@@ -216,6 +220,12 @@ def index():
 
     conn.close()
     return render_template("index.html", counts=counts, total=total, has_history=has_history)
+
+
+@app.route("/partner-awards")
+def partner_awards():
+    """Partner Awards page (Air France / KLM)."""
+    return render_template("partner_awards.html")
 
 
 @app.route("/business")

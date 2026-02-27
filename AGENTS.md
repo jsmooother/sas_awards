@@ -22,3 +22,4 @@ SAS Awards is a Python toolset for tracking SAS EuroBonus award flight availabil
 - `daily_business_by_date.py` and `daily_plus_europe.py` are actually bash scripts despite their `.py` extension.
 - The Telegram bot and morning report script are optional and require `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` secrets in `.env`.
 - Standard dev commands are documented in `README.md` under "Quick start".
+- **Partner Awards** (Air France/KLM) is a separate module: `partner_awards/airfrance/`. Uses `~/sas_awards/partner_awards.sqlite`. See `partner_awards/airfrance/README.md`.
