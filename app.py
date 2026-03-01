@@ -382,19 +382,13 @@ def _get_runner_config_path():
 
 
 def _enrich_watch_routes_with_scan_info(conn, watch_routes, month_param):
-    """Add last_scan_at and coverage (days/total) per route."""
-    import calendar
-    try:
-        y, m = int(month_param[:4]), int(month_param[5:7])
-        month_days_total = calendar.monthrange(y, m)[1]
-    except (ValueError, IndexError):
-        month_days_total = 31
+    """Add last_scan_at and coverage (days with data in next 365 days from today / 365) per route."""
     enriched = []
     for r in watch_routes:
         row = dict(r)
         row["last_scan_at"] = None
         row["coverage_days"] = 0
-        row["coverage_total"] = month_days_total
+        row["coverage_total"] = 365
         cur = conn.execute(
             """SELECT t.finished_at FROM partner_award_job_tasks t
                INNER JOIN partner_award_jobs j ON j.id = t.job_id AND j.program = 'flyingblue'
@@ -407,9 +401,10 @@ def _enrich_watch_routes_with_scan_info(conn, watch_routes, month_param):
             row["last_scan_at"] = scan_row[0]
         cur = conn.execute(
             """SELECT COUNT(DISTINCT depart_date) FROM partner_award_calendar_fares
-               WHERE source='AF' AND origin=? AND destination=? AND substr(depart_date,1,7)=?
+               WHERE source='AF' AND origin=? AND destination=?
+               AND depart_date >= date('now') AND depart_date < date('now', '+365 days')
                AND cabin_class IN ('BUSINESS','PREMIUM')""",
-            (r["origin"], r["destination"], month_param),
+            (r["origin"], r["destination"]),
         )
         cov_row = cur.fetchone()
         if cov_row and cov_row[0] is not None:
@@ -1042,6 +1037,41 @@ def partner_awards_flyingblue_run_batch():
     return redirect(request.referrer or "/partner-awards/flyingblue")
 
 
+@app.route("/partner-awards/flyingblue/refresh-route", methods=["POST"])
+def partner_awards_flyingblue_refresh_route():
+    """Queue a single-route refresh (force, 12 months) and start worker. Form: origin, destination."""
+    origin = (request.form.get("origin") or "").strip().upper()[:4]
+    destination = (request.form.get("destination") or "").strip().upper()[:4]
+    if not origin or not destination:
+        return redirect(request.referrer or "/partner-awards/flyingblue")
+    db_path = _get_partner_db_path()
+    from partner_awards.airfrance.adapter import init_db
+    conn = sqlite3.connect(db_path)
+    init_db(conn)
+    params = {"months": 12, "cabins": ["BUSINESS", "PREMIUM"], "force_refresh": True, "routes": [[origin, destination]]}
+    progress = {"total_tasks": 0, "done_tasks": 0, "skipped_tasks": 0, "current_task": None}
+    conn.execute(
+        """INSERT INTO partner_award_jobs (program, job_type, status, params_json, progress_json)
+           VALUES ('flyingblue', 'open_dates_batch', 'queued', ?, ?)""",
+        (json.dumps(params), json.dumps(progress)),
+    )
+    conn.commit()
+    conn.close()
+    project_root = Path(__file__).resolve().parent
+    try:
+        subprocess.Popen(
+            [sys.executable, "-m", "partner_awards.jobs_worker"],
+            cwd=str(project_root),
+            env=os.environ.copy(),
+            start_new_session=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception:
+        pass
+    return redirect(request.referrer or "/partner-awards/flyingblue")
+
+
 @app.route("/partner-awards/flyingblue/status", methods=["GET"])
 def partner_awards_flyingblue_status():
     """JSON: latest Flying Blue job progress for status poller."""
@@ -1348,6 +1378,16 @@ def partner_awards_calendar():
             (origin, destination),
         )
         months_available = [r[0] for r in months_cur.fetchall() if r[0]]
+
+        # If no month given but we have data, default to first available month so calendar shows data
+        if not month_param and months_available:
+            month_param = months_available[0]
+        # If requested month has no data for this route, redirect to first available month so data is linked
+        if month_param and months_available and month_param not in months_available:
+            from urllib.parse import urlencode
+            q = request.args.to_dict()
+            q["month"] = months_available[0]
+            return redirect(request.path + "?" + urlencode(q))
 
         if not month_param:
             if start_date:

@@ -103,6 +103,7 @@
       </label>
       <button type="submit" class="btn-primary" {% if not enabled_count %}disabled title="Enable at least one route below"{% endif %}>Start Run</button>
     </form>
+    <p class="table-hint" style="margin:0 0 0.5rem;font-size:0.85rem;color:var(--color-text-muted);">Availability changes quickly (cheap flights get booked). Run daily or every few days for useful data.</p>
     <div id="job-status" class="table-hint" style="margin:0 0 0.5rem;padding:0.5rem;background:var(--color-bg-secondary,#f8f9fa);border-radius:4px;">
       {% if latest_job %}
       <strong>Run status:</strong> <span id="job-status-text">{{ latest_job.status }}</span> · <span id="job-progress-count">{{ latest_job.progress.done_tasks or 0 }}/{{ latest_job.progress.total_tasks or 0 }}</span><span id="job-timestamp">{% if latest_job.finished_at %} · Retrieved {{ latest_job.finished_at[:16].replace('T',' ') }}{% elif latest_job.started_at %} · Started {{ latest_job.started_at[:16].replace('T',' ') }}{% endif %}</span><span id="job-current-task" style="{% if not latest_job.progress.current_task %}display:none;{% endif %}">{% if latest_job.progress.current_task %} · {{ latest_job.progress.current_task }}{% endif %}</span>
@@ -183,7 +184,7 @@
             <th>Destination</th>
             <th>Enabled</th>
             <th>Last scan</th>
-            <th>Coverage</th>
+            <th>Coverage <span style="font-weight:normal;color:var(--color-text-muted);font-size:0.8rem;" title="Days with data in next 365 days from today / 365">(next 365d)</span></th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -200,13 +201,12 @@
               </form>
             </td>
             <td>{{ r.last_scan_at[:16] if r.last_scan_at else '—' }}</td>
-            <td>{{ r.coverage_days }}/{{ r.coverage_total }}</td>
+            <td title="Days with data in next 365 days from today / 365">{{ r.coverage_days }}/{{ r.coverage_total }}</td>
             <td>
               <form method="post" action="/partner-awards/watchlist/remove" style="display:inline;">
                 <input type="hidden" name="id" value="{{ r.id }}">
-                <button type="submit" class="btn-remove" title="Remove route" onclick="return confirm('Are you sure you want to remove this route?');">×</button>
+                <button type="submit" class="btn-remove" title="Remove route" onclick="return confirm('Are you sure you want to remove this route?');">Remove</button>
               </form>
-              <a href="/partner-awards/calendar?origin={{ r.origin }}&destination={{ r.destination }}&month={{ month }}&cabin={{ cabin }}" style="margin-left:0.5rem;font-size:0.85rem;">Calendar</a>
             </td>
           </tr>
           {% endfor %}
@@ -233,7 +233,6 @@
             <th>Best miles</th>
             <th>Green days</th>
             <th>Coverage</th>
-            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -244,9 +243,6 @@
             <td>{{ r.best_miles }}</td>
             <td>{{ r.green_days_count }}</td>
             <td>{{ r.coverage_days }}</td>
-            <td>
-              <a href="/partner-awards/calendar?origin={{ r.origin }}&destination={{ r.destination }}&month={{ month }}&cabin={{ cabin }}">Open calendar</a>
-            </td>
           </tr>
           {% endfor %}
         </tbody>
@@ -596,11 +592,14 @@
 .fb-connect-active { background: rgba(52, 199, 89, 0.15); color: var(--color-text-success); }
 .fb-connect-inactive { background: var(--color-bg-soft); color: var(--color-text-muted); }
 .btn-remove {
-  width: 1.25rem; height: 1.25rem; padding: 0; font-size: 1rem; line-height: 1;
-  color: var(--color-text-danger); background: transparent; border: 1px solid var(--color-border-default);
-  border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+  padding: 0.35rem 0.75rem; font-size: 0.8125rem; font-weight: 500; line-height: 1.2;
+  color: var(--color-text-secondary, #666); background: none; border: none;
+  border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+  -webkit-appearance: none; appearance: none; min-height: 28px;
+  transition: opacity 0.2s, color 0.2s, transform 0.1s;
 }
-.btn-remove:hover { background: rgba(200,0,0,0.08); }
+.btn-remove:hover { color: var(--color-text-primary, #111); }
+.btn-remove:active { transform: scale(0.97); }
 .report-tabs a { display:inline-block; padding:0.5rem 1rem; margin-right:0.25rem; text-decoration:none; color:var(--color-text-secondary); border-radius:4px 4px 0 0; }
 .report-tabs a:hover { background:var(--color-bg-secondary); color:var(--color-text-primary); }
 .report-tabs a.active { background:var(--color-bg-primary); color:var(--color-text-primary); font-weight:600; border-bottom:2px solid var(--color-bg-primary); margin-bottom:-1px; }

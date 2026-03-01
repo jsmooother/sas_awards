@@ -62,12 +62,18 @@ def _route_run_recently(conn: sqlite3.Connection, origin: str, dest: str, month:
     return cur.fetchone() is not None
 
 
-def create_open_dates_tasks(conn: sqlite3.Connection, job_id: int) -> int:
-    """Expand job into tasks. Returns total task count. Always queues both outbound and return leg per route."""
-    cur = conn.execute(
-        """SELECT origin, destination FROM partner_award_watch_routes WHERE program='flyingblue' AND enabled=1"""
-    )
-    rows = cur.fetchall()
+def create_open_dates_tasks(conn: sqlite3.Connection, job_id: int, params: dict | None = None) -> int:
+    """Expand job into tasks. Returns total task count. Always queues both outbound and return leg per route.
+    If params has 'routes' (list of [origin, dest]), only those routes are used; otherwise all enabled watch_routes."""
+    params = params or {}
+    routes_param = params.get("routes")
+    if routes_param and isinstance(routes_param, list):
+        rows = [tuple(r) for r in routes_param if isinstance(r, (list, tuple)) and len(r) >= 2]
+    else:
+        cur = conn.execute(
+            """SELECT origin, destination FROM partner_award_watch_routes WHERE program='flyingblue' AND enabled=1"""
+        )
+        rows = cur.fetchall()
     months = _next_12_months()
     cabins = ["BUSINESS", "PREMIUM"]
     count = 0
@@ -163,7 +169,7 @@ def process_job(conn: sqlite3.Connection, job: tuple) -> None:
     )
     conn.commit()
 
-    total = create_open_dates_tasks(conn, job_id)
+    total = create_open_dates_tasks(conn, job_id, params)
     conn.execute(
         "UPDATE partner_award_jobs SET progress_json=? WHERE id=?",
         (json.dumps({"total_tasks": total, "done_tasks": 0, "skipped_tasks": 0, "current_task": None}), job_id),
