@@ -1,0 +1,4 @@
+outputs/
+venv/
+config.json
+*.log

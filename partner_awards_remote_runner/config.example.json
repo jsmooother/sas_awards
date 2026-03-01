@@ -1,0 +1,31 @@
+{
+  "hosts_to_try": [
+    {
+      "name": "KLM-SE",
+      "base_url": "https://www.klm.se",
+      "brand": "KL",
+      "country": "SE",
+      "language": "en",
+      "market": "SE"
+    },
+    {
+      "name": "AF-US",
+      "base_url": "https://wwws.airfrance.us",
+      "brand": "AF",
+      "country": "US",
+      "language": "en",
+      "market": "US"
+    }
+  ],
+  "url_booking_flow": "LEISURE",
+  "timeout_ms": 60000,
+  "pacing_ms": [800, 1800],
+  "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  "output_dir": "outputs",
+  "warmup_timeout_ms": 60000,
+  "gql_timeout_ms": 60000,
+  "max_retries": 2,
+  "retry_backoff_sec": 3,
+  "retry_on_status": [403, 429, 503],
+  "force_http1": false
+}

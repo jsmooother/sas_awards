@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Partner Awards – SAS Awards{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Partner Awards</h1>
+  <p class="page-subtitle" style="margin:0;color:var(--color-text-secondary);font-size:1rem;">EuroBonus partner award availability across programs</p>
+</div>
+
+<div class="card">
+  <div class="card-inner">
+    <h3 class="card-section-title">Programs</h3>
+    <div class="view-grid">
+      <a href="/partner-awards/sas" class="view-card">
+        <span class="view-card-label">SAS</span>
+        <span class="view-card-desc">SAS EuroBonus award scanner</span>
+      </a>
+      <a href="/partner-awards/flyingblue" class="view-card">
+        <span class="view-card-label">Flying Blue</span>
+        <span class="view-card-desc">Air France / KLM · watchlist & top deals</span>
+      </a>
+      <a href="/partner-awards/virgin" class="view-card">
+        <span class="view-card-label">Virgin Atlantic</span>
+        <span class="view-card-desc">Coming soon</span>
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,320 @@
+{% extends "base.html" %}
+{% block title %}Partner Awards – Flying Blue – SAS Awards{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Flying Blue Dashboard</h1>
+  <p class="page-subtitle" style="margin:0;color:var(--color-text-secondary);font-size:1rem;">Air France / KLM · Watchlist & Top Deals</p>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+<div class="card" style="margin-bottom:1rem;border-color:var(--color-text-danger,red);">
+  <div class="card-inner">
+    {% for category, msg in messages %}
+    <p style="margin:0;color:var(--color-text-danger);">{{ msg }}</p>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% endwith %}
+
+{% if validation_warning %}
+<div class="card" style="margin-bottom:1rem;border-color:var(--color-text-warning,orange);">
+  <div class="card-inner">
+    <p style="margin:0;font-size:0.9rem;color:var(--color-text-warning);">{{ validation_warning }}</p>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-inner">
+    <h3 class="card-section-title">Controls</h3>
+    <form method="get" action="" class="toolbar filters" style="margin-bottom:1rem;">
+      {% for o in discovery_origins %}
+      <input type="hidden" name="discovery_origin" value="{{ o }}">
+      {% endfor %}
+      <input type="hidden" name="discovery_months" value="{{ discovery_months_mode }}">
+      <input type="hidden" name="discovery_limit" value="{{ discovery_limit }}">
+      <input type="hidden" name="heatmap_watchlist" value="{{ '1' if heatmap_watchlist_only else '0' }}">
+      <input type="hidden" name="heatmap_max" value="{{ heatmap_max }}">
+      <label>
+        Month
+        <select name="month" style="width:10rem;">
+          {% for m in months_available %}
+          <option value="{{ m }}" {% if month == m %}selected{% endif %}>{{ m }}</option>
+          {% endfor %}
+          {% if not months_available %}
+          <option value="{{ month }}" selected>{{ month }}</option>
+          {% endif %}
+        </select>
+      </label>
+      <label>
+        Cabin
+        <select name="cabin">
+          <option value="BUSINESS" {% if cabin == 'BUSINESS' %}selected{% endif %}>Business</option>
+          <option value="PREMIUM" {% if cabin == 'PREMIUM' %}selected{% endif %}>Premium Economy</option>
+        </select>
+      </label>
+      <button type="submit">Apply</button>
+    </form>
+
+    <h3 class="card-section-title" style="margin-top:1.5rem;">Batch scan</h3>
+    <form method="post" action="/partner-awards/flyingblue/run-batch" style="margin-bottom:1rem;">
+      <button type="submit" class="btn-primary">Run watchlist scan (12 months, Business + Premium)</button>
+    </form>
+    {% if latest_job %}
+    <div class="table-hint" style="margin:0 0 0.5rem;padding:0.5rem;background:var(--color-bg-secondary,#f8f9fa);border-radius:4px;">
+      <strong>Latest job:</strong> {{ latest_job.status }} · {{ latest_job.progress.done_tasks or 0 }}/{{ latest_job.progress.total_tasks or 0 }}
+      {% if latest_job.progress.current_task %} · {{ latest_job.progress.current_task }}{% endif %}
+      · <a href="/partner-awards/jobs/{{ latest_job.id }}">Detail</a>
+      {% if latest_job.last_error %}
+      <br><span style="color:var(--color-text-danger);font-size:0.85rem;">{{ latest_job.last_error }}</span>
+      {% endif %}
+    </div>
+    {% else %}
+    <p class="table-hint" style="margin:0 0 1rem;font-size:0.9rem;">Run the worker: <code>python -m partner_awards.jobs_worker</code></p>
+    {% endif %}
+
+    <h3 class="card-section-title" style="margin-top:1.5rem;">Watchlist</h3>
+    <p class="table-hint" style="margin:0 0 0.5rem;">Scanning runs separately; this view shows what's already in DB.</p>
+    <form method="post" action="/partner-awards/watchlist/add" class="toolbar filters" style="margin-bottom:1rem;">
+      <input type="hidden" name="program" value="flyingblue">
+      <input type="text" name="origin" placeholder="Origin (e.g. AMS)" maxlength="4" style="width:5rem;">
+      <input type="text" name="destination" placeholder="Dest (e.g. JNB)" maxlength="4" style="width:5rem;">
+      <button type="submit" class="btn-secondary">Add route</button>
+    </form>
+    {% if watch_routes %}
+    <ul style="margin:0;padding:0;list-style:none;">
+      {% for r in watch_routes %}
+      <li style="margin:0.25rem 0;display:flex;align-items:center;gap:0.5rem;">
+        <form method="post" action="/partner-awards/watchlist/toggle" style="display:inline;">
+          <input type="hidden" name="id" value="{{ r.id }}">
+          <input type="hidden" name="enabled" value="{{ '0' if r.enabled else '1' }}">
+          <span>{{ r.origin }} → {{ r.destination }}</span>
+          <button type="submit" class="btn-secondary" style="padding:0.2rem 0.5rem;font-size:0.8rem;">
+            {{ 'Disable' if r.enabled else 'Enable' }}
+          </button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="table-hint" style="color:var(--color-text-muted);">No routes in watchlist. Add origin and destination above.</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card" style="margin-top:1rem;">
+  <div class="card-inner">
+    <h3 class="card-section-title">Quick stats</h3>
+    <p style="margin:0;">
+      Cheapest this month across watchlist: <strong>from {{ stats.global_min_miles or '—' }} miles</strong>
+      {% if stats.days_at_min %} · {{ stats.days_at_min }} day(s) at min{% endif %}
+      · Routes enabled: {{ watch_routes|selectattr('enabled')|list|length }}
+      · Days with data: {{ stats.total_days }}
+    </p>
+  </div>
+</div>
+
+<div class="card" style="margin-top:1rem;">
+  <div class="card-inner">
+    <h3 class="card-section-title">Top deals</h3>
+    {% if top_deals %}
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Miles</th>
+            <th>Date</th>
+            <th>Route</th>
+            <th>Source</th>
+            <th>Updated</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in top_deals %}
+          <tr>
+            <td>{{ d.miles }}</td>
+            <td>{{ d.depart_date }}</td>
+            <td>{{ d.origin }} → {{ d.destination }}</td>
+            <td>{{ d.host_used or '—' }}</td>
+            <td style="font-size:0.75rem;color:var(--color-text-muted);">{{ d.updated_at or '—' }}</td>
+            <td>
+              <a href="/partner-awards/calendar?origin={{ d.origin }}&destination={{ d.destination }}&month={{ month }}&cabin={{ cabin }}">Open calendar</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="table-hint" style="color:var(--color-text-muted);">No deals yet. Add routes to watchlist, run calendar scan, then refresh.</p>
+    <p class="table-hint"><a href="/partner-awards/flyingblue/ingest">Import & test ingest</a> · <a href="/partner-awards/calendar">Calendar Fares</a></p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card" style="margin-top:1rem;">
+  <div class="card-inner">
+    <h3 class="card-section-title">Route discovery</h3>
+    <p class="table-hint" style="margin:0 0 0.75rem;">Which destinations look most interesting from selected origins? Based on data already in DB (no live fetch). Ranked by best miles, then green days (days at monthly min).</p>
+    <form method="get" action="" class="toolbar filters" style="margin-bottom:1rem;">
+      <input type="hidden" name="month" value="{{ month }}">
+      <input type="hidden" name="cabin" value="{{ cabin }}">
+      <input type="hidden" name="heatmap_watchlist" value="{{ '1' if heatmap_watchlist_only else '0' }}">
+      <input type="hidden" name="heatmap_max" value="{{ heatmap_max }}">
+      <fieldset style="border:none;padding:0;margin:0 1rem 0 0;">
+        <legend style="font-size:0.85rem;margin-bottom:0.25rem;">Origins</legend>
+        {% for orig in origins_available %}
+        <label class="tick-option" style="margin-right:0.75rem;">
+          <input type="checkbox" name="discovery_origin" value="{{ orig }}" {% if orig in discovery_origins %}checked{% endif %}>
+          {{ orig }}
+        </label>
+        {% endfor %}
+        {% if not origins_available %}
+        <span style="color:var(--color-text-muted);font-size:0.9rem;">No origin data yet. Run calendar scan first.</span>
+        {% endif %}
+      </fieldset>
+      <label>
+        Months
+        <select name="discovery_months" style="width:7rem;">
+          <option value="1" {% if discovery_months_mode == '1' %}selected{% endif %}>Last 1</option>
+          <option value="3" {% if discovery_months_mode == '3' %}selected{% endif %}>Last 3</option>
+          <option value="6" {% if discovery_months_mode == '6' %}selected{% endif %}>Last 6</option>
+          <option value="12" {% if discovery_months_mode == '12' %}selected{% endif %}>Last 12</option>
+          <option value="all" {% if discovery_months_mode == 'all' %}selected{% endif %}>All</option>
+        </select>
+      </label>
+      {% if discovery_months_used %}
+      <span style="font-size:0.8rem;color:var(--color-text-muted);margin-left:0.5rem;">Analysis: {{ discovery_months_used|join(', ') }}</span>
+      {% endif %}
+      <label>
+        Limit
+        <input type="number" name="discovery_limit" value="{{ discovery_limit }}" min="5" max="100" style="width:4rem;">
+      </label>
+      <button type="submit" class="btn-secondary">Refresh discovery</button>
+    </form>
+    {% if route_discovery %}
+    {% for origin, origin_rows in route_discovery %}
+    {% if origin_rows %}
+    <h4 style="margin:1rem 0 0.5rem;">From {{ origin }}</h4>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Destination</th>
+            <th>Best miles</th>
+            <th>Green days</th>
+            <th>Coverage</th>
+            <th>Months</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in origin_rows %}
+          <tr>
+            <td>{{ r.destination }}</td>
+            <td>{{ r.best_miles }}</td>
+            <td>{{ r.green_days_count }}</td>
+            <td>{{ r.coverage_days }}</td>
+            <td>{{ r.months_count }}</td>
+            <td>
+              <form method="post" action="/partner-awards/watchlist/add" style="display:inline;">
+                <input type="hidden" name="program" value="flyingblue">
+                <input type="hidden" name="origin" value="{{ r.origin }}">
+                <input type="hidden" name="destination" value="{{ r.destination }}">
+                <button type="submit" class="btn-secondary" style="padding:0.2rem 0.5rem;font-size:0.8rem;">Add to watchlist</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    {% endfor %}
+    {% else %}
+    <p class="table-hint" style="color:var(--color-text-muted);">No discovery data. Ensure calendar_fares has data for selected origins; run scans and import.</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card" style="margin-top:1rem;">
+  <div class="card-inner">
+    <h3 class="card-section-title">Heatmap</h3>
+    <p class="table-hint" style="margin:0 0 0.75rem;">Route × day-of-month grid for {{ month }} · {{ cabin }}. Min miles per route highlighted in green.</p>
+    <form method="get" action="" class="toolbar filters" style="margin-bottom:0.75rem;">
+      {% for o in discovery_origins %}
+      <input type="hidden" name="discovery_origin" value="{{ o }}">
+      {% endfor %}
+      <input type="hidden" name="month" value="{{ month }}">
+      <input type="hidden" name="cabin" value="{{ cabin }}">
+      <input type="hidden" name="discovery_months" value="{{ discovery_months_mode }}">
+      <input type="hidden" name="discovery_limit" value="{{ discovery_limit }}">
+      <label>
+        Routes
+        <select name="heatmap_watchlist" onchange="this.form.submit()" style="width:11rem;">
+          <option value="1" {% if heatmap_watchlist_only %}selected{% endif %}>Enabled watchlist only</option>
+          <option value="0" {% if not heatmap_watchlist_only %}selected{% endif %}>All watchlist routes</option>
+        </select>
+      </label>
+      <label>
+        Max routes
+        <select name="heatmap_max" onchange="this.form.submit()" style="width:5rem;">
+          <option value="15" {% if heatmap_max == 15 %}selected{% endif %}>15</option>
+          <option value="25" {% if heatmap_max == 25 %}selected{% endif %}>25</option>
+          <option value="40" {% if heatmap_max == 40 %}selected{% endif %}>40</option>
+          <option value="60" {% if heatmap_max == 60 %}selected{% endif %}>60</option>
+        </select>
+      </label>
+    </form>
+    {% if heatmap.rows %}
+    <p class="table-hint" style="margin:0 0 0.5rem;font-size:0.85rem;">Routes shown: {{ heatmap.rows|length }} · Click a route to open calendar</p>
+    <div class="table-wrapper" style="overflow-x:auto;">
+      <table class="heatmap-table">
+        <thead>
+          <tr>
+            <th class="hm-route-col">Route</th>
+            {% for d in heatmap.days %}
+            <th class="hm-day-col">{{ d }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in heatmap.rows %}
+          <tr>
+            <td class="hm-route-col">
+              <a href="/partner-awards/calendar?origin={{ row.origin }}&destination={{ row.destination }}&month={{ month }}&cabin={{ cabin }}">{{ row.origin }}→{{ row.destination }}</a>
+            </td>
+            {% for d in heatmap.days %}
+            <td class="hm-cell {{ row.css_classes.get(d, 'hm-empty') }}" title="{{ row.origin }}→{{ row.destination }} day {{ d }}">
+              <a href="/partner-awards/calendar?origin={{ row.origin }}&destination={{ row.destination }}&month={{ month }}&cabin={{ cabin }}">{{ row.display_values.get(d, '—') }}</a>
+            </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="table-hint" style="margin-top:0.5rem;font-size:0.8rem;">Legend: <span class="hm-legend hm-min">min</span> <span class="hm-legend hm-low">≤1.1×</span> <span class="hm-legend hm-mid">≤1.3×</span> <span class="hm-legend hm-high">higher</span> <span class="hm-legend hm-empty">no data</span></p>
+    {% else %}
+    <p class="table-hint" style="color:var(--color-text-muted);">No heatmap data. Add routes to watchlist and ensure calendar scans have run for {{ month }}.</p>
+    {% endif %}
+  </div>
+</div>
+<style>
+.heatmap-table { font-size:0.8rem; border-collapse:collapse; }
+.heatmap-table th, .heatmap-table td { padding:0.15rem 0.35rem; border:1px solid var(--color-border-subtle, #ddd); text-align:center; }
+.hm-route-col { min-width:6rem; text-align:left; position:sticky; left:0; background:var(--color-bg-primary,#fff); z-index:1; }
+.hm-day-col { min-width:2.5rem; font-weight:500; }
+.hm-cell { min-width:2.5rem; }
+.hm-cell a { text-decoration:none; color:inherit; }
+.hm-min { background:#d4edda !important; color:#155724; }
+.hm-low { background:#e8f5e9; }
+.hm-mid { background:#fff9c4; }
+.hm-high { background:#ffe0b2; }
+.hm-empty { background:var(--color-bg-secondary,#f5f5f5); color:var(--color-text-muted,#999); }
+.hm-legend { padding:0.1rem 0.4rem; margin-right:0.5rem; border-radius:2px; font-size:0.75rem; }
+</style>
+{% endblock %}

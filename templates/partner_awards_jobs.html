@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Partner Awards Jobs – SAS Awards{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Batch Jobs</h1>
+  <p class="page-subtitle" style="margin:0;color:var(--color-text-secondary);font-size:1rem;">Flying Blue watchlist scans</p>
+</div>
+
+<div class="card">
+  <div class="card-inner">
+    <p class="table-hint" style="margin:0 0 1rem;"><a href="/partner-awards/flyingblue">← Flying Blue dashboard</a></p>
+    {% if jobs %}
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Type</th>
+            <th>Status</th>
+            <th>Created</th>
+            <th>Progress</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for j in jobs %}
+          <tr>
+            <td>{{ j.id }}</td>
+            <td>{{ j.job_type }}</td>
+            <td>{{ j.status }}</td>
+            <td>{{ j.created_at }}</td>
+            <td>
+              {% set p = j.progress %}
+              {{ p.done_tasks or 0 }}/{{ p.total_tasks or 0 }}
+              {% if p.current_task %} · {{ p.current_task }}{% endif %}
+            </td>
+            <td><a href="/partner-awards/jobs/{{ j.id }}">Detail</a></td>
+          </tr>
+          {% if j.last_error %}
+          <tr>
+            <td colspan="6" style="font-size:0.8rem;color:var(--color-text-muted);">{{ j.last_error }}</td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="table-hint" style="color:var(--color-text-muted);">No jobs yet. Run a scan from the <a href="/partner-awards/flyingblue">Flying Blue dashboard</a>.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Error – SAS Awards{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Something went wrong</h1>
+</div>
+<div class="card">
+  <div class="card-inner">
+    <p style="margin:0 0 1rem;color:var(--color-text-danger);">{{ message }}</p>
+    <p class="table-hint"><a href="/partner-awards/flyingblue">← Flying Blue dashboard</a> · <a href="/partner-awards">Partner Awards</a></p>
+  </div>
+</div>
+{% endblock %}
