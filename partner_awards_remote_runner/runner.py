@@ -218,6 +218,7 @@ async def _try_hosts_warmup(cfg: Dict, log_path: Optional[Path]) -> Optional[tup
         name = host.get("name", host.get("base_url", "?"))
         # Only attach cookies when host matches cookie origin (e.g. AF-US cookies -> AF-US host)
         host_cookies = all_cookies if (prefer and name == prefer) else []
+        cookie_header = (cfg.get("cookie_string") or os.environ.get("AF_COOKIE_STRING") or "") if (prefer and name == prefer) else None
         headers = _headers_from_host(host, cfg)
         client = AirFrancePlaywrightClient(
             user_agent=cfg["user_agent"],
@@ -226,6 +227,7 @@ async def _try_hosts_warmup(cfg: Dict, log_path: Optional[Path]) -> Optional[tup
             timeout_ms=cfg.get("warmup_timeout_ms", 60000),
             force_http1=cfg.get("force_http1", False),
             cookies=host_cookies,
+            cookie_header=cookie_header,
         )
         try:
             result = await client.warmup()
@@ -631,18 +633,28 @@ async def _open_dates_month_impl(
     cabins: List[str],
     dry_run: bool,
     log_path: Optional[Path],
+    full_month: bool = True,
 ) -> int:
-    """Fetch a full month of LowestFareOffers in MONTH mode (AMS→JNB open dates style)."""
+    """Fetch LowestFareOffers for a month. full_month=True uses DAY type for full daily grid (like KLM).
+    full_month=False uses MONTH type with 12-month window (sparse sample)."""
     import calendar as cal_mod
     # month: "2026-03"
     year, m = int(month[:4]), int(month[5:7])
     start_date = f"{year:04d}-{m:02d}-01"
-    # MONTH type: use 12-month window like the open-dates page (e.g. 2026-03-01/2027-02-28)
-    end_m = m + 11
-    end_year = year + (end_m - 1) // 12
-    end_m = ((end_m - 1) % 12) + 1
-    end_day = cal_mod.monthrange(end_year, end_m)[1]
-    end_date = f"{end_year:04d}-{end_m:02d}-{end_day:02d}"
+    last_day = cal_mod.monthrange(year, m)[1]
+    end_date = f"{year:04d}-{m:02d}-{last_day:02d}"
+
+    if full_month:
+        # DAY type + single month: returns every day like KLM calendar
+        interval_type = "DAY"
+    else:
+        # MONTH type: 12-month window (sparse sample)
+        end_m = m + 11
+        end_year = year + (end_m - 1) // 12
+        end_m = ((end_m - 1) % 12) + 1
+        end_day = cal_mod.monthrange(end_year, end_m)[1]
+        end_date = f"{end_year:04d}-{end_m:02d}-{end_day:02d}"
+        interval_type = "MONTH"
 
     if dry_run:
         _log_line(f"DRY-RUN: open-dates-month {origin}→{destination} {month} cabins={cabins}", log_path)
@@ -673,11 +685,11 @@ async def _open_dates_month_impl(
 
         lowest_res = await client.gql_post(
             "SharedSearchLowestFareOffersForSearchQuery",
-            build_lowest_fares(origin, destination, start_date, end_date, cabins, search_uuid, interval_type="MONTH"),
+            build_lowest_fares(origin, destination, start_date, end_date, cabins, search_uuid, interval_type=interval_type),
             url_params=url_params,
             max_retries=cfg.get("max_retries", 1),
         )
-        _log_line(f"LowestFares MONTH: status={lowest_res.get('status')}", log_path)
+        _log_line(f"LowestFares {interval_type}: status={lowest_res.get('status')}", log_path)
 
         # Fallback: if empty, retry with AIRPORT/AIRPORT (some routes e.g. AMS-CPT need both as airports)
         if lowest_res["ok"] and lowest_res.get("json") and not _has_lowest_fare_connections(lowest_res["json"]):
@@ -688,7 +700,7 @@ async def _open_dates_month_impl(
             ]:
                 _log_line(f"LowestFares empty, retrying with {retry_name} for {origin}-{destination}", log_path)
                 await asyncio.sleep(_pacing_delay(cfg))
-                kw = {"interval_type": "MONTH", "origin_type": "CITY", "destination_type": "AIRPORT", **retry_kw}
+                kw = {"interval_type": interval_type, "origin_type": "CITY", "destination_type": "AIRPORT", **retry_kw}
                 retry_res = await client.gql_post(
                     "SharedSearchLowestFareOffersForSearchQuery",
                     build_lowest_fares(origin, destination, start_date, end_date, cabins, search_uuid, **kw),

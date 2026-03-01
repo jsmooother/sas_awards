@@ -105,7 +105,16 @@
     .sidebar-section-title {
       padding: 0.4rem 1.5rem; font-size: 0.6875rem; font-weight: 600;
       color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.06em;
+      display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+      cursor: pointer; user-select: none; transition: color 0.2s;
     }
+    .sidebar-section-title:hover { color: var(--color-text-secondary); }
+    .sidebar-section-title::after {
+      content: '▾'; font-size: 0.7rem; transition: transform 0.2s;
+    }
+    .sidebar-section.collapsed .sidebar-section-title::after { transform: rotate(-90deg); }
+    .sidebar-section-links { overflow: hidden; max-height: 420px; transition: max-height 0.25s ease-out, opacity 0.2s; }
+    .sidebar-section.collapsed .sidebar-section-links { max-height: 0 !important; opacity: 0; pointer-events: none; }
     .sidebar a {
       display: flex; align-items: center; gap: 0.75rem;
       padding: 0.6rem 1.5rem; color: var(--color-text-secondary); text-decoration: none;
@@ -360,6 +369,24 @@
       cursor: pointer;
     }
     .btn-secondary:hover { background: var(--color-bg-secondary-btn-hover); }
+    /* iOS-style toggle switch (compact) */
+    .toggle-switch {
+      -webkit-appearance: none; appearance: none;
+      width: 36px; height: 22px; padding: 0; margin: 0;
+      background: rgba(0, 0, 0, 0.2); border: none; border-radius: 999px;
+      cursor: pointer; position: relative; flex-shrink: 0;
+      transition: background 0.2s ease;
+    }
+    .toggle-switch::before {
+      content: ''; position: absolute; top: 2px; left: 2px;
+      width: 18px; height: 18px; border-radius: 50%;
+      background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+      transition: transform 0.2s ease;
+    }
+    .toggle-switch:hover { background: rgba(0, 0, 0, 0.25); }
+    .toggle-switch.toggle-on { background: #34c759; }
+    .toggle-switch.toggle-on:hover { background: #30b350; }
+    .toggle-switch.toggle-on::before { transform: translateX(14px); }
     .filters button, .btn-primary {
       padding: 0.55rem 1.25rem; font-size: 0.9375rem; font-weight: 500;
       background: var(--color-primary); color: var(--color-bg-surface); border: none; border-radius: var(--radius-lg);
@@ -549,44 +576,74 @@
   <div class="layout">
     <aside class="sidebar">
       <div class="sidebar-brand">SAS Awards</div>
-      <div class="sidebar-section">
-        <div class="sidebar-section-title">General</div>
-        <a href="/" class="{% if request.path == '/' %}active{% endif %}"><span class="sidebar-icon">◇</span> Dashboard</a>
-        <a href="/search" class="{% if request.path == '/search' %}active{% endif %}"><span class="sidebar-icon">○</span> Search</a>
+      <div class="sidebar-section" id="sidebar-sas" data-sidebar-section="sas">
+        <div class="sidebar-section-title" tabindex="0" role="button" aria-expanded="true" aria-controls="sidebar-sas-links">SAS EuroBonus</div>
+        <div class="sidebar-section-links" id="sidebar-sas-links">
+          <a href="/" class="{% if request.path == '/' %}active{% endif %}"><span class="sidebar-icon">◇</span> SAS Overview</a>
+          <a href="/weekend" class="{% if request.path == '/weekend' %}active{% endif %}"><span class="sidebar-icon">▸</span> Weekend</a>
+          <a href="/new" class="{% if request.path == '/new' %}active{% endif %}"><span class="sidebar-icon">▸</span> New today</a>
+          <a href="/reports/summary" class="{% if request.path == '/reports/summary' %}active{% endif %}"><span class="sidebar-icon">▸</span> Morning Summary</a>
+          <a href="/reports/business-by-date" class="{% if request.path == '/reports/business-by-date' %}active{% endif %}"><span class="sidebar-icon">▸</span> Business by Date</a>
+          <a href="/reports/new-business" class="{% if request.path == '/reports/new-business' %}active{% endif %}"><span class="sidebar-icon">▸</span> New Business</a>
+          <a href="/reports/plus-europe" class="{% if request.path == '/reports/plus-europe' %}active{% endif %}"><span class="sidebar-icon">▸</span> Europe</a>
+          <a href="/reports/weekend-trips" class="{% if request.path == '/reports/weekend-trips' %}active{% endif %}"><span class="sidebar-icon">▸</span> Weekend Trips</a>
+        </div>
       </div>
-      <div class="sidebar-section">
-        <div class="sidebar-section-title">Views</div>
-        <a href="/all" class="{% if request.path == '/all' %}active{% endif %}"><span class="sidebar-icon">▸</span> All Europe</a>
-        <a href="/business" class="{% if request.path == '/business' %}active{% endif %}"><span class="sidebar-icon">▸</span> Business</a>
-        <a href="/plus" class="{% if request.path == '/plus' %}active{% endif %}"><span class="sidebar-icon">▸</span> Plus & Business</a>
-        <a href="/weekend" class="{% if request.path == '/weekend' %}active{% endif %}"><span class="sidebar-icon">▸</span> Weekend</a>
-        <a href="/new" class="{% if request.path == '/new' %}active{% endif %}"><span class="sidebar-icon">▸</span> New today</a>
+      <div class="sidebar-section" id="sidebar-partner" data-sidebar-section="partner">
+        <div class="sidebar-section-title" tabindex="0" role="button" aria-expanded="true" aria-controls="sidebar-partner-links">Partner Awards</div>
+        <div class="sidebar-section-links" id="sidebar-partner-links">
+          <a href="/partner-awards" class="{% if request.path == '/partner-awards' %}active{% endif %}"><span class="sidebar-icon">◆</span> Partner Awards</a>
+          <a href="/partner-awards/flyingblue" class="{% if request.path == '/partner-awards/flyingblue' %}active{% endif %}"><span class="sidebar-icon">▸</span> Flying Blue</a>
+          <a href="/partner-awards/virgin" class="{% if request.path == '/partner-awards/virgin' %}active{% endif %}"><span class="sidebar-icon">▸</span> Virgin Atlantic</a>
+          <a href="/partner-awards/jobs" class="{% if request.path == '/partner-awards/jobs' or request.path.startswith('/partner-awards/jobs/') %}active{% endif %}"><span class="sidebar-icon">▸</span> Batch Jobs</a>
+        </div>
       </div>
-      <div class="sidebar-section">
-        <div class="sidebar-section-title">Reports</div>
-        <a href="/reports" class="{% if request.path == '/reports' %}active{% endif %}"><span class="sidebar-icon">◆</span> All Reports</a>
-        <a href="/reports/business-by-date" class="{% if request.path == '/reports/business-by-date' %}active{% endif %}"><span class="sidebar-icon">▸</span> Business by Date</a>
-        <a href="/reports/new-business" class="{% if request.path == '/reports/new-business' %}active{% endif %}"><span class="sidebar-icon">▸</span> New Business</a>
-        <a href="/reports/plus-europe" class="{% if request.path == '/reports/plus-europe' %}active{% endif %}"><span class="sidebar-icon">▸</span> Europe</a>
-        <a href="/reports/weekend-trips" class="{% if request.path == '/reports/weekend-trips' %}active{% endif %}"><span class="sidebar-icon">▸</span> Weekend Trips</a>
-        <a href="/reports/summary" class="{% if request.path == '/reports/summary' %}active{% endif %}"><span class="sidebar-icon">▸</span> Morning Summary</a>
-        <a href="/reports/us-calendar" class="{% if request.path == '/reports/us-calendar' %}active{% endif %}"><span class="sidebar-icon">▸</span> US Calendar</a>
-      </div>
-      <div class="sidebar-section">
-        <div class="sidebar-section-title">Partner Awards</div>
-        <a href="/partner-awards" class="{% if request.path == '/partner-awards' %}active{% endif %}"><span class="sidebar-icon">◆</span> Partner Awards</a>
-        <a href="/partner-awards/sas" class="{% if request.path == '/partner-awards/sas' %}active{% endif %}"><span class="sidebar-icon">▸</span> SAS</a>
-        <a href="/partner-awards/flyingblue" class="{% if request.path == '/partner-awards/flyingblue' %}active{% endif %}"><span class="sidebar-icon">▸</span> Flying Blue</a>
-        <a href="/partner-awards/virgin" class="{% if request.path == '/partner-awards/virgin' %}active{% endif %}"><span class="sidebar-icon">▸</span> Virgin</a>
-        <a href="/partner-awards/calendar" class="{% if request.path == '/partner-awards/calendar' %}active{% endif %}"><span class="sidebar-icon">▸</span> Calendar Fares</a>
-        <a href="/partner-awards/jobs" class="{% if request.path == '/partner-awards/jobs' %}active{% endif %}"><span class="sidebar-icon">▸</span> Batch Jobs</a>
-        <a href="/partner-awards/self-test" class="{% if request.path == '/partner-awards/self-test' %}active{% endif %}"><span class="sidebar-icon">▸</span> Self-test</a>
-        <a href="/partner-awards/dashboard" class="{% if request.path == '/partner-awards/dashboard' %}active{% endif %}"><span class="sidebar-icon">▸</span> Dashboard</a>
+      <div class="sidebar-section" id="sidebar-admin" data-sidebar-section="admin">
+        <div class="sidebar-section-title" tabindex="0" role="button" aria-expanded="true" aria-controls="sidebar-admin-links">Admin</div>
+        <div class="sidebar-section-links" id="sidebar-admin-links">
+          <a href="/partner-awards/self-test" class="{% if request.path == '/partner-awards/self-test' %}active{% endif %}"><span class="sidebar-icon">▸</span> System test</a>
+        </div>
       </div>
     </aside>
     <main class="main">
       {% block content %}{% endblock %}
     </main>
   </div>
+  <script>
+  (function(){
+    var STORAGE_KEY = 'sidebar-sections';
+    function loadState() {
+      try {
+        var s = localStorage.getItem(STORAGE_KEY);
+        return s ? JSON.parse(s) : {};
+      } catch (e) { return {}; }
+    }
+    function saveState(state) {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+    }
+    function toggle(section) {
+      var id = section.id.replace('sidebar-', '');
+      var state = loadState();
+      state[id] = section.classList.toggle('collapsed');
+      saveState(state);
+      var title = section.querySelector('.sidebar-section-title');
+      if (title) title.setAttribute('aria-expanded', !section.classList.contains('collapsed'));
+    }
+    document.querySelectorAll('.sidebar-section[data-sidebar-section]').forEach(function(section) {
+      var state = loadState();
+      var id = section.getAttribute('data-sidebar-section');
+      var hasActive = section.querySelector('a.active');
+      if (state[id] && !hasActive) section.classList.add('collapsed');
+      var title = section.querySelector('.sidebar-section-title');
+      if (title) {
+        title.setAttribute('aria-expanded', !section.classList.contains('collapsed'));
+        title.addEventListener('click', function() { toggle(section); });
+        title.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(section); }
+        });
+      }
+    });
+  })();
+  </script>
 </body>
 </html>

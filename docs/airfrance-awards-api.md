@@ -185,6 +185,16 @@ Returns:
 * Lowest miles required
 * Often tax/surcharge component
 
+## Troubleshooting: Empty `data` for some routes
+
+Some routes (e.g. AMS→CPT) may return `{"data": {}}` when called programmatically, even though the KLM website shows availability when searched manually. Possible causes:
+
+- **Session**: Logged-in Flying Blue members may get different results.
+- **Award vs cash**: Ensure you're on the **Flying Blue award** (miles) calendar, not the cash price calendar. Our scanner uses `bookingFlow: "REWARD"` in the payload.
+- **Request capture**: In browser DevTools → Network, when you do a manual search that returns data, find the `SharedSearchLowestFareOffersForSearchQuery` POST and copy the full request (URL params, headers, body). Compare with our `build_lowest_fares` + `gql_post` to find differences.
+
+The runner retries with `AIRPORT/AIRPORT` and `bookingFlow=REWARD` URL when the first attempt returns empty.
+
 ---
 
 # 3️⃣ Available Offers (Flight List for Specific Date)

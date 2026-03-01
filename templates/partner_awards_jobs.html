@@ -2,7 +2,7 @@
 {% block title %}Partner Awards Jobs – SAS Awards{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h1 class="page-title">Batch Jobs</h1>
+  <h1 class="page-title">Job Runs</h1>
   <p class="page-subtitle" style="margin:0;color:var(--color-text-secondary);font-size:1rem;">Flying Blue watchlist scans</p>
 </div>
 
@@ -31,7 +31,7 @@
             <td>{{ j.created_at }}</td>
             <td>
               {% set p = j.progress %}
-              {{ p.done_tasks or 0 }}/{{ p.total_tasks or 0 }}
+              {{ p.done_tasks or 0 }}/{{ p.total_tasks or 0 }}{% if p.skipped_tasks %} · {{ p.skipped_tasks }} skipped{% endif %}
               {% if p.current_task %} · {{ p.current_task }}{% endif %}
             </td>
             <td><a href="/partner-awards/jobs/{{ j.id }}">Detail</a></td>

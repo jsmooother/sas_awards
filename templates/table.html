@@ -4,9 +4,6 @@
 <div class="page-header">
   <h1 class="page-title">{{ title }} <span class="count">({% if rows %}{{ rows|length }}{% else %}0{% endif %})</span></h1>
   <div class="tabs">
-    <a href="/all" class="{% if request.path == '/all' %}active{% endif %}">All Europe</a>
-    <a href="/business" class="{% if request.path == '/business' %}active{% endif %}">Business</a>
-    <a href="/plus" class="{% if request.path == '/plus' %}active{% endif %}">Plus & Business</a>
     <a href="/weekend" class="{% if request.path == '/weekend' %}active{% endif %}">Weekend</a>
     <a href="/new" class="{% if request.path == '/new' %}active{% endif %}">New today</a>
   </div>

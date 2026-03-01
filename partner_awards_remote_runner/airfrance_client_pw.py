@@ -88,8 +88,13 @@ def build_lowest_fares(
     cabins: List[str],
     search_state_uuid: str,
     interval_type: str = "DAY",
+    origin_type: str = "CITY",
+    destination_type: str = "AIRPORT",
+    omit_departure_date: bool = False,
 ) -> Dict[str, Any]:
-    """Build LowestFareOffers payload. interval_type: DAY or MONTH."""
+    """Build LowestFareOffers payload. interval_type: DAY or MONTH.
+    origin_type/destination_type: CITY or AIRPORT. For airport-to-airport routes (e.g. AMS-CPT),
+    use AIRPORT for both when CITY/AIRPORT returns empty."""
     date_interval = f"{start_date}/{end_date}"
     cabin_list = cabins if isinstance(cabins, list) else [cabins]
     return {
@@ -104,15 +109,15 @@ def build_lowest_fares(
                 "type": interval_type,
                 "requestedConnections": [
                     {
-                        "departureDate": start_date,
+                        **({"departureDate": start_date} if not omit_departure_date else {}),
                         "dateInterval": date_interval,
-                        "origin": {"type": "CITY", "code": origin},
-                        "destination": {"type": "AIRPORT", "code": destination},
+                        "origin": {"type": origin_type, "code": origin},
+                        "destination": {"type": destination_type, "code": destination},
                     },
                     {
                         "dateInterval": None,
-                        "origin": {"type": "AIRPORT", "code": destination},
-                        "destination": {"type": "CITY", "code": origin},
+                        "origin": {"type": destination_type, "code": destination},
+                        "destination": {"type": origin_type, "code": origin},
                     },
                 ],
             },
@@ -129,6 +134,21 @@ def build_lowest_fares(
     }
 
 
+def _parse_cookie_string(cookie_string: str, domain: str = ".klm.se") -> List[Dict[str, Any]]:
+    """Parse curl-style cookie string (name1=val1; name2=val2) into Playwright format."""
+    if not cookie_string or not cookie_string.strip():
+        return []
+    cookies: List[Dict[str, Any]] = []
+    for part in cookie_string.split(";"):
+        part = part.strip()
+        if "=" in part:
+            name, _, value = part.partition("=")
+            name, value = name.strip(), value.strip()
+            if name:
+                cookies.append({"name": name, "value": value, "domain": domain, "path": "/"})
+    return cookies
+
+
 class AirFrancePlaywrightClient:
     """Playwright-based Air France/KLM GraphQL client for VPS deployment."""
 
@@ -141,6 +161,8 @@ class AirFrancePlaywrightClient:
         retry_backoff_sec: int = 3,
         retry_on_status: Optional[List[int]] = None,
         force_http1: bool = False,
+        cookies: Optional[List[Dict[str, Any]]] = None,
+        cookie_header: Optional[str] = None,
     ):
         self.user_agent = user_agent
         self.headers_base = headers_base
@@ -150,6 +172,8 @@ class AirFrancePlaywrightClient:
         self.retry_backoff_sec = retry_backoff_sec
         self.retry_on_status = retry_on_status or [403, 429, 503]
         self.force_http1 = force_http1
+        self._cookies = cookies or []
+        self._cookie_header = (cookie_header or "").strip() or None
         self._context = None
         self._browser = None
         self._playwright = None
@@ -170,6 +194,16 @@ class AirFrancePlaywrightClient:
             ignore_https_errors=True,
             extra_http_headers=self.headers_base,
         )
+        if self._cookies:
+            from urllib.parse import urlparse
+            parsed = urlparse(self.base_url)
+            domain = parsed.netloc.lstrip("www.") if parsed.netloc else ".klm.se"
+            if not domain.startswith("."):
+                domain = "." + domain
+            for c in self._cookies:
+                c.setdefault("domain", domain)
+                c.setdefault("path", "/")
+            await self._context.add_cookies(self._cookies)
 
     async def close(self):
         """Release resources."""
@@ -249,14 +283,17 @@ class AirFrancePlaywrightClient:
         while attempt <= max_retries:
             t0 = time.perf_counter()
             try:
+                gql_headers = {
+                    **self.headers_base,
+                    "content-type": "application/json",
+                    "accept": "application/json",
+                }
+                if self._cookie_header:
+                    gql_headers["Cookie"] = self._cookie_header
                 req = await self._context.request.post(
                     url,
                     data=body,
-                    headers={
-                        **self.headers_base,
-                        "content-type": "application/json",
-                        "accept": "application/json",
-                    },
+                    headers=gql_headers,
                     timeout=self.timeout_ms,
                 )
                 elapsed_ms = round((time.perf_counter() - t0) * 1000)

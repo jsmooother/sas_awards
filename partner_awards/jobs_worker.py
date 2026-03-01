@@ -50,24 +50,46 @@ def _next_12_months() -> list[str]:
     return out
 
 
-def create_open_dates_tasks(conn: sqlite3.Connection, job_id: int) -> int:
-    """Expand job into tasks. Returns total task count."""
+def _route_run_recently(conn: sqlite3.Connection, origin: str, dest: str, month: str, cabin: str, exclude_job_id: int) -> bool:
+    """True if this route (origin, dest, month, cabin) was successfully run in the last 24 hours (excluding given job)."""
     cur = conn.execute(
-        "SELECT origin, destination FROM partner_award_watch_routes WHERE program='flyingblue' AND enabled=1"
+        """SELECT 1 FROM partner_award_job_tasks
+           WHERE origin=? AND destination=? AND month=? AND cabin=?
+             AND status='done' AND finished_at > datetime('now', '-24 hours')
+             AND job_id != ? LIMIT 1""",
+        (origin, dest, month, cabin, exclude_job_id),
     )
-    routes = cur.fetchall()
+    return cur.fetchone() is not None
+
+
+def create_open_dates_tasks(conn: sqlite3.Connection, job_id: int) -> int:
+    """Expand job into tasks. Returns total task count. When include_returns=1, also queue return (dest, origin)."""
+    cur = conn.execute(
+        """SELECT origin, destination, COALESCE(include_returns, 0)
+           FROM partner_award_watch_routes WHERE program='flyingblue' AND enabled=1"""
+    )
+    rows = cur.fetchall()
     months = _next_12_months()
     cabins = ["BUSINESS", "PREMIUM"]
     count = 0
-    for (origin, dest) in routes:
-        for cabin in cabins:
-            for month in months:
-                conn.execute(
-                    """INSERT INTO partner_award_job_tasks (job_id, origin, destination, month, cabin, status)
-                       VALUES (?, ?, ?, ?, ?, 'queued')""",
-                    (job_id, origin, dest, month, cabin),
-                )
-                count += 1
+    seen = set()  # (origin, dest, month, cabin) to avoid duplicate tasks
+    for (origin, dest, include_returns) in rows:
+        legs = [(origin, dest)]
+        if include_returns:
+            legs.append((dest, origin))
+        for (o, d) in legs:
+            for cabin in cabins:
+                for month in months:
+                    key = (o, d, month, cabin)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    conn.execute(
+                        """INSERT INTO partner_award_job_tasks (job_id, origin, destination, month, cabin, status)
+                           VALUES (?, ?, ?, ?, ?, 'queued')""",
+                        (job_id, o, d, month, cabin),
+                    )
+                    count += 1
     conn.commit()
     return count
 
@@ -134,7 +156,9 @@ def run_import(path: str) -> tuple[bool, str]:
 
 def process_job(conn: sqlite3.Connection, job: tuple) -> None:
     job_id, program, job_type = job[0], job[1], job[2]
-    _log(f"Processing job {job_id} type={job_type}")
+    params = job[3] if len(job) > 3 else {}
+    force_refresh = params.get("force_refresh", False)
+    _log(f"Processing job {job_id} type={job_type} force_refresh={force_refresh}")
 
     conn.execute(
         "UPDATE partner_award_jobs SET status='running', started_at=datetime('now') WHERE id=?",
@@ -145,7 +169,7 @@ def process_job(conn: sqlite3.Connection, job: tuple) -> None:
     total = create_open_dates_tasks(conn, job_id)
     conn.execute(
         "UPDATE partner_award_jobs SET progress_json=? WHERE id=?",
-        (json.dumps({"total_tasks": total, "done_tasks": 0, "current_task": None}), job_id),
+        (json.dumps({"total_tasks": total, "done_tasks": 0, "skipped_tasks": 0, "current_task": None}), job_id),
     )
     conn.commit()
 
@@ -156,9 +180,33 @@ def process_job(conn: sqlite3.Connection, job: tuple) -> None:
     tasks = cur.fetchall()
     done = 0
     failed = 0
+    skipped = 0
     last_error = None
 
     for task_id, origin, dest, month, cabin in tasks:
+        if not force_refresh and _route_run_recently(conn, origin, dest, month, cabin, job_id):
+            conn.execute(
+                "UPDATE partner_award_job_tasks SET status='skipped', finished_at=datetime('now'), last_error='Skipped: run <24h ago' WHERE id=?",
+                (task_id,),
+            )
+            skipped += 1
+            done += 1
+            conn.execute(
+                "UPDATE partner_award_jobs SET progress_json=? WHERE id=?",
+                (
+                    json.dumps({
+                        "total_tasks": total,
+                        "done_tasks": done,
+                        "skipped_tasks": skipped,
+                        "current_task": None,
+                    }),
+                    job_id,
+                ),
+            )
+            conn.commit()
+            _log(f"  Task {origin}→{dest} {month} {cabin} [skipped: <24h]")
+            continue
+
         conn.execute(
             "UPDATE partner_award_job_tasks SET status='running', started_at=datetime('now'), attempts=attempts+1 WHERE id=?",
             (task_id,),
@@ -166,7 +214,12 @@ def process_job(conn: sqlite3.Connection, job: tuple) -> None:
         conn.execute(
             "UPDATE partner_award_jobs SET progress_json=? WHERE id=?",
             (
-                json.dumps({"total_tasks": total, "done_tasks": done, "current_task": f"{origin}→{dest} {month} {cabin}"}),
+                json.dumps({
+                    "total_tasks": total,
+                    "done_tasks": done,
+                    "skipped_tasks": skipped,
+                    "current_task": f"{origin}→{dest} {month} {cabin}",
+                }),
                 job_id,
             ),
         )
@@ -206,7 +259,7 @@ def process_job(conn: sqlite3.Connection, job: tuple) -> None:
         conn.execute(
             "UPDATE partner_award_jobs SET progress_json=?, last_error=? WHERE id=?",
             (
-                json.dumps({"total_tasks": total, "done_tasks": done, "current_task": None}),
+                json.dumps({"total_tasks": total, "done_tasks": done, "skipped_tasks": skipped, "current_task": None}),
                 last_error,
                 job_id,
             ),
@@ -218,13 +271,14 @@ def process_job(conn: sqlite3.Connection, job: tuple) -> None:
         "UPDATE partner_award_jobs SET status=?, finished_at=datetime('now'), progress_json=?, last_error=? WHERE id=?",
         (
             job_status,
-            json.dumps({"total_tasks": total, "done_tasks": done, "current_task": None}),
+            json.dumps({"total_tasks": total, "done_tasks": done, "skipped_tasks": skipped, "current_task": None}),
             last_error if failed else None,
             job_id,
         ),
     )
     conn.commit()
-    _log(f"Job {job_id} finished: {job_status} ({done}/{total} tasks, {failed} failed)")
+    skip_info = f", {skipped} skipped" if skipped else ""
+    _log(f"Job {job_id} finished: {job_status} ({done}/{total} tasks, {failed} failed{skip_info})")
 
 
 def main():
@@ -241,7 +295,7 @@ def main():
             conn = get_conn()
             init_db(conn)
             cur = conn.execute(
-                """SELECT id, program, job_type FROM partner_award_jobs
+                """SELECT id, program, job_type, params_json FROM partner_award_jobs
                    WHERE program='flyingblue' AND status='queued'
                    ORDER BY id LIMIT 1"""
             )
@@ -249,16 +303,22 @@ def main():
             conn.close()
 
             if row:
+                job_id, program, job_type, params_json = row[0], row[1], row[2], row[3] or "{}"
+                try:
+                    params = json.loads(params_json)
+                except (json.JSONDecodeError, TypeError):
+                    params = {}
+                job_tuple = (job_id, program, job_type, params)
                 conn = get_conn()
                 init_db(conn)
                 try:
-                    process_job(conn, row)
+                    process_job(conn, job_tuple)
                 except Exception as e:
                     _log(f"Job error: {e}")
                     try:
                         conn.execute(
                             "UPDATE partner_award_jobs SET status='failed', last_error=?, finished_at=datetime('now') WHERE id=?",
-                            (str(e)[:500], row[0]),
+                            (str(e)[:500], job_id),
                         )
                         conn.commit()
                     except Exception:

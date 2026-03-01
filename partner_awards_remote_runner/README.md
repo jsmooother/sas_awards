@@ -165,3 +165,11 @@ outputs/
 - **Warmup fails**: VPS egress may also be blocked. Try a different provider or region.
 - **403/429/503**: Retries with 3s backoff are automatic. Increase `pacing_delay_sec` in config.
 - **Timeout**: Default 60s. Increase `gql_timeout_ms` in config.json.
+- **Empty data for some routes (e.g. AMS→CPT)** when the KLM website shows availability: The API often returns empty for unauthenticated requests. Use your **Flying Blue session cookies**:
+  1. Log in to https://www.klm.se and open the award calendar (Use your Miles).
+  2. In DevTools → Network, trigger a search that returns data.
+  3. Find the `SharedSearchLowestFareOffersForSearchQuery` request → Copy as cURL.
+  4. Extract the `-b '...'` cookie string and either:
+     - Add to `config.json`: `"cookie_string": "name1=val1; name2=val2; ..."` (the full `-b` value), or
+     - Set env: `export AF_COOKIE_STRING="name1=val1; name2=val2; ..."` before running.
+  Cookies expire; refresh when scans start returning empty again.

@@ -1142,6 +1142,27 @@ def partner_awards_watchlist_toggle():
     return redirect(request.referrer or "/partner-awards/flyingblue")
 
 
+@app.route("/partner-awards/watchlist/toggle-returns", methods=["POST"])
+def partner_awards_watchlist_toggle_returns():
+    """Toggle watchlist route include_returns. Form: id, include_returns (0/1). Redirect back."""
+    route_id = request.form.get("id")
+    include_returns = 1 if str(request.form.get("include_returns", "1")).strip() in ("1", "true", "on", "yes") else 0
+    try:
+        route_id = int(route_id)
+    except (TypeError, ValueError):
+        return redirect(request.referrer or "/partner-awards/flyingblue")
+
+    db_path = _get_partner_db_path()
+    from partner_awards.airfrance.adapter import init_db
+    from partner_awards.airfrance.watchlist import set_watch_route_include_returns
+    conn = sqlite3.connect(db_path)
+    init_db(conn)
+    set_watch_route_include_returns(conn, route_id, include_returns)
+    conn.close()
+
+    return redirect(request.referrer or "/partner-awards/flyingblue")
+
+
 @app.route("/partner-awards/jobs")
 def partner_awards_jobs():
     """List batch jobs for Flying Blue."""

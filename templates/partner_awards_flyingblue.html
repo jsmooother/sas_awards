@@ -146,6 +146,7 @@
             <th>Origin</th>
             <th>Destination</th>
             <th>Enabled</th>
+            <th>Include returns</th>
             <th>Last scan</th>
             <th>Coverage</th>
             <th>Actions</th>
@@ -161,6 +162,13 @@
                 <input type="hidden" name="id" value="{{ r.id }}">
                 <input type="hidden" name="enabled" value="{{ '0' if r.enabled else '1' }}">
                 <button type="submit" class="toggle-switch {% if r.enabled %}toggle-on{% endif %}" title="{{ 'On – tap to turn off' if r.enabled else 'Off – tap to turn on' }}" aria-label="{{ 'On' if r.enabled else 'Off' }}"></button>
+              </form>
+            </td>
+            <td>
+              <form method="post" action="/partner-awards/watchlist/toggle-returns" style="display:inline;">
+                <input type="hidden" name="id" value="{{ r.id }}">
+                <input type="hidden" name="include_returns" value="{{ '0' if r.include_returns else '1' }}">
+                <button type="submit" class="toggle-switch {% if r.include_returns %}toggle-on{% endif %}" title="{{ 'Include return leg (e.g. BKK→AMS) in scan – tap to turn off' if r.include_returns else 'Tap to include return in next run' }}" aria-label="Include returns">{% if r.include_returns %}✓{% else %}—{% endif %}</button>
               </form>
             </td>
             <td>{{ r.last_scan_at[:16] if r.last_scan_at else '—' }}</td>

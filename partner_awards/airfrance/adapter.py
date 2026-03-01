@@ -365,6 +365,16 @@ def init_db(conn: sqlite3.Connection) -> None:
         else:
             raise
 
+    # Migration: watch_routes include_returns (scan return direction too)
+    try:
+        conn.execute(
+            "ALTER TABLE partner_award_watch_routes ADD COLUMN include_returns INTEGER NOT NULL DEFAULT 0"
+        )
+        conn.commit()
+    except sqlite3.OperationalError as e4:
+        if "duplicate column name" not in str(e4).lower():
+            raise
+
 
 def create_scan_run(
     conn: sqlite3.Connection,

@@ -2,13 +2,123 @@
 {% block title %}Partner Awards – Virgin Atlantic – SAS Awards{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h1 class="page-title">Virgin Atlantic Partner Awards</h1>
-  <p class="page-subtitle" style="margin:0;color:var(--color-text-secondary);font-size:1rem;">EuroBonus on Virgin Atlantic flights</p>
+  <h1 class="page-title">Virgin Atlantic Dashboard</h1>
+  <p class="page-subtitle" style="margin:0;color:var(--color-text-secondary);font-size:1rem;">EuroBonus on Virgin Atlantic · Coming soon</p>
 </div>
 
 <div class="card">
   <div class="card-inner">
-    <p style="margin:0;"><strong>Coming soon.</strong> Virgin Atlantic partner award tracking will be added in a future update.</p>
+    <h3 class="card-section-title">1. Select scope</h3>
+    <div class="toolbar filters" style="opacity:0.6;pointer-events:none;">
+      <label>
+        Month
+        <select name="month" disabled style="width:10rem;">
+          <option value="2026-02">2026-02</option>
+          <option value="2026-03">2026-03</option>
+        </select>
+      </label>
+      <label>
+        Cabin
+        <select name="cabin" disabled>
+          <option value="BUSINESS" selected>Business</option>
+          <option value="PREMIUM">Premium Economy</option>
+        </select>
+      </label>
+      <button type="button" disabled>Apply</button>
+    </div>
+    <p class="table-hint" style="margin-top:0.5rem;font-size:0.85rem;color:var(--color-text-muted);">Controls will be available when Virgin Atlantic scanning is implemented.</p>
   </div>
 </div>
+
+<div class="card" style="margin-top:1rem;">
+  <div class="card-inner">
+    <h3 class="card-section-title">2. Watchlist</h3>
+    <p class="table-hint" style="margin:0 0 0.5rem;">Add routes to prepare for future scanning. Harmless to add now.</p>
+    <form method="post" action="/partner-awards/watchlist/add" class="toolbar filters" style="margin-bottom:1rem;">
+      <input type="hidden" name="program" value="virgin">
+      <label>
+        <select name="origin" required>
+          <option value="LHR">LHR</option>
+          <option value="MAN">MAN</option>
+          <option value="LGW">LGW</option>
+          <option value="EDI">EDI</option>
+          <option value="GLA">GLA</option>
+        </select>
+      </label>
+      <input type="text" name="destination" placeholder="Dest (e.g. JFK)" maxlength="4" style="width:5rem;">
+      <button type="submit" class="btn-secondary">Add route</button>
+    </form>
+    {% if watch_routes %}
+    <ul style="margin:0;padding:0;list-style:none;">
+      {% for r in watch_routes %}
+      <li style="margin:0.25rem 0;display:flex;align-items:center;gap:0.5rem;">
+        <form method="post" action="/partner-awards/watchlist/toggle" style="display:inline-flex;align-items:center;gap:0.5rem;">
+          <input type="hidden" name="id" value="{{ r.id }}">
+          <input type="hidden" name="enabled" value="{{ '0' if r.enabled else '1' }}">
+          <span>{{ r.origin }} → {{ r.destination }}</span>
+          <button type="submit" class="toggle-switch {% if r.enabled %}toggle-on{% endif %}" title="{{ 'On – tap to turn off' if r.enabled else 'Off – tap to turn on' }}" aria-label="{{ 'On' if r.enabled else 'Off' }}"></button>
+        </form>
+        <form method="post" action="/partner-awards/watchlist/remove" style="display:inline;">
+          <input type="hidden" name="id" value="{{ r.id }}">
+          <button type="submit" class="btn-remove" title="Remove route" onclick="return confirm('Are you sure you want to remove this route?');">×</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="table-hint" style="color:var(--color-text-muted);">No routes yet. Add origin and destination above.</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card" style="margin-top:1rem;">
+  <div class="card-inner">
+    <h3 class="card-section-title">3. Run scan</h3>
+    <button type="button" class="btn-primary" disabled style="opacity:0.6;cursor:not-allowed;">Run watchlist scan</button>
+    <p class="table-hint" style="margin-top:0.5rem;font-size:0.9rem;color:var(--color-text-muted);">
+      Scanning not yet implemented for Virgin Atlantic. Batch scan will be available in a future update.
+    </p>
+  </div>
+</div>
+
+<div class="card" style="margin-top:1rem;">
+  <div class="card-inner">
+    <h3 class="card-section-title">4. Review</h3>
+    <p class="table-hint" style="margin:0 0 0.75rem;">Reports structure is ready; data will appear when scanning is implemented.</p>
+    <a href="/partner-awards/virgin/reports" class="btn-primary" style="display:inline-block;text-decoration:none;padding:0.5rem 1rem;">View reports →</a>
+  </div>
+</div>
+
+<script>
+(function() {
+  document.addEventListener('submit', function(e) {
+    var form = e.target;
+    if (form.method === 'post' && form.action && form.action.indexOf('/partner-awards/watchlist/toggle') !== -1) {
+      e.preventDefault();
+      var btn = form.querySelector('button.toggle-switch');
+      var fd = new FormData(form);
+      fetch(form.action, { method: 'POST', body: fd, redirect: 'manual' })
+        .then(function(res) {
+          if (res.type === 'opaqueredirect' || res.status === 0 || res.status === 302) {
+            btn.classList.toggle('toggle-on');
+            var isOn = btn.classList.contains('toggle-on');
+            btn.title = isOn ? 'On – tap to turn off' : 'Off – tap to turn on';
+            btn.setAttribute('aria-label', isOn ? 'On' : 'Off');
+            var enabledInput = form.querySelector('input[name="enabled"]');
+            if (enabledInput) enabledInput.value = isOn ? '1' : '0';
+          }
+        })
+        .catch(function() { form.submit(); });
+    }
+  });
+})();
+</script>
+<style>
+.btn-remove {
+  width: 1.25rem; height: 1.25rem; padding: 0; font-size: 1rem; line-height: 1;
+  color: var(--color-text-danger); background: transparent; border: 1px solid var(--color-border-default);
+  border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+}
+.btn-remove:hover { background: rgba(200,0,0,0.08); }
+</style>
 {% endblock %}

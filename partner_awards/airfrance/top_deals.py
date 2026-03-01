@@ -109,3 +109,48 @@ def get_top_deals_for_month(
         "total_days": total_days,
     }
     return rows, stats
+
+
+def get_top_deals_for_year(
+    conn: sqlite3.Connection,
+    cabin: str,
+    routes: list[tuple[str, str]],
+    days: int = 365,
+) -> dict[str, dict[str, Any]]:
+    """
+    Returns best miles per date for next `days` across watchlist routes.
+    Returns: {date_iso: {"miles": int, "origin": str, "destination": str}}
+    """
+    if not routes:
+        return {}
+
+    route_conds = " OR ".join("(origin=? AND destination=?)" for _ in routes)
+    route_params = [p for pair in routes for p in pair]
+
+    # Date range: today through today + days. Subquery gets min per date; join picks one matching route.
+    sql = f"""
+    SELECT b.depart_date,
+      (SELECT c2.origin FROM partner_award_calendar_fares c2
+       WHERE c2.source='AF' AND c2.cabin_class=? AND c2.depart_date=b.depart_date
+         AND c2.miles=b.min_m AND ({route_conds})
+       LIMIT 1),
+      (SELECT c2.destination FROM partner_award_calendar_fares c2
+       WHERE c2.source='AF' AND c2.cabin_class=? AND c2.depart_date=b.depart_date
+         AND c2.miles=b.min_m AND ({route_conds})
+       LIMIT 1),
+      b.min_m
+    FROM (
+      SELECT depart_date, MIN(miles) as min_m
+      FROM partner_award_calendar_fares
+      WHERE source='AF' AND cabin_class=? AND miles IS NOT NULL
+        AND depart_date >= date('now') AND depart_date <= date('now', '+' || CAST(? AS TEXT) || ' days')
+        AND ({route_conds})
+      GROUP BY depart_date
+    ) b
+    """
+    cur = conn.execute(sql, [cabin] + route_params + [cabin] + route_params + [cabin, days] + route_params)
+    by_date = {}
+    for row in cur.fetchall():
+        date_iso = row[0]
+        by_date[date_iso] = {"miles": row[3], "origin": row[1], "destination": row[2]}
+    return by_date
