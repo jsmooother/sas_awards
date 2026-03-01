@@ -2,16 +2,33 @@
 {% block title %}Partner Awards – Flying Blue – SAS Awards{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h1 class="page-title">Flying Blue Dashboard</h1>
-  <p class="page-subtitle" style="margin:0;color:var(--color-text-secondary);font-size:1rem;">Air France / KLM · Watchlist & Top Deals</p>
+  <h1 class="page-title">Flying Blue</h1>
+  <p class="page-subtitle" style="margin:0;color:var(--color-text-secondary);font-size:1rem;">Routes · Calendar · Windows</p>
+  {% if data_freshness %}
+  <div class="data-freshness-strip" style="margin-top:0.5rem;padding:0.4rem 0.6rem;background:var(--color-bg-secondary,#f5f5f5);border-radius:4px;font-size:0.8rem;">
+    {% if data_freshness.last_scan_at %}
+    <span title="Last completed scan">Last scan: {{ data_freshness.last_scan_at[:16] }}{% if data_freshness.last_scan_host %} · {{ data_freshness.last_scan_host }}{% endif %}</span>
+    <span style="margin:0 0.5rem;">|</span>
+    {% endif %}
+    <span>Coverage: {{ data_freshness.routes_24h }}/{{ data_freshness.total_routes }} routes in 24h</span>
+    <span style="margin:0 0.5rem;">|</span>
+    <span>{{ month }}: {{ data_freshness.month_days_captured }}/{{ data_freshness.month_days_total }} days</span>
+  </div>
+  {% endif %}
 </div>
+
+<nav class="report-tabs" style="margin-bottom:1rem;border-bottom:1px solid var(--color-border-default);">
+  <a href="?tab=routes&month={{ month }}&cabin={{ cabin }}" class="{% if tab == 'routes' %}active{% endif %}">Routes</a>
+  <a href="?tab=calendar&cabin={{ cabin }}&route={{ route_filter or '' }}" class="{% if tab == 'calendar' %}active{% endif %}">Calendar</a>
+  <a href="?tab=windows&month={{ month }}&cabin={{ cabin }}&win_origin={{ win_origin or 'AMS' }}&win_dest={{ win_dest or '' }}&win_trip={{ win_trip or 'weekend' }}" class="{% if tab == 'windows' %}active{% endif %}">Windows</a>
+</nav>
 
 {% with messages = get_flashed_messages(with_categories=true) %}
 {% if messages %}
-<div class="card" style="margin-bottom:1rem;border-color:var(--color-text-danger,red);">
+<div class="card" style="margin-bottom:1rem;border-color:{% if messages[0][0] == 'success' %}var(--color-text-success){% else %}var(--color-text-danger,red){% endif %};">
   <div class="card-inner">
     {% for category, msg in messages %}
-    <p style="margin:0;color:var(--color-text-danger);">{{ msg }}</p>
+    <p style="margin:0;color:{% if category == 'success' %}var(--color-text-success){% else %}var(--color-text-danger){% endif %};">{{ msg }}</p>
     {% endfor %}
   </div>
 </div>
@@ -26,45 +43,69 @@
 </div>
 {% endif %}
 
-<div class="card">
+{% if tab == 'routes' %}
+{% if blocked_until %}
+<div class="card" style="margin-bottom:1rem;border-color:var(--color-text-warning,orange);">
   <div class="card-inner">
-    <h3 class="card-section-title">Controls</h3>
-    <form method="get" action="" class="toolbar filters" style="margin-bottom:1rem;">
-      {% for o in discovery_origins %}
-      <input type="hidden" name="discovery_origin" value="{{ o }}">
-      {% endfor %}
-      <input type="hidden" name="discovery_months" value="{{ discovery_months_mode }}">
-      <input type="hidden" name="discovery_limit" value="{{ discovery_limit }}">
-      <input type="hidden" name="heatmap_watchlist" value="{{ '1' if heatmap_watchlist_only else '0' }}">
-      <input type="hidden" name="heatmap_max" value="{{ heatmap_max }}">
-      <label>
-        Month
-        <select name="month" style="width:10rem;">
-          {% for m in months_available %}
-          <option value="{{ m }}" {% if month == m %}selected{% endif %}>{{ m }}</option>
-          {% endfor %}
-          {% if not months_available %}
-          <option value="{{ month }}" selected>{{ month }}</option>
-          {% endif %}
-        </select>
-      </label>
-      <label>
-        Cabin
-        <select name="cabin">
-          <option value="BUSINESS" {% if cabin == 'BUSINESS' %}selected{% endif %}>Business</option>
-          <option value="PREMIUM" {% if cabin == 'PREMIUM' %}selected{% endif %}>Premium Economy</option>
-        </select>
-      </label>
-      <button type="submit">Apply</button>
+    <p style="margin:0 0 0.5rem;"><strong>Fetching paused</strong> until {{ blocked_until[:19] }} due to cooldown. Clear to resume tests and scans.</p>
+    <form method="post" action="/partner-awards/flyingblue/clear-block" style="display:inline;">
+      <button type="submit" class="btn-secondary">Clear block & resume</button>
     </form>
+  </div>
+</div>
+{% endif %}
+{# Connect Flying Blue first — may be needed at every new daily run #}
+<div class="card" id="fb-connect-card">
+  <div class="card-inner">
+    <div class="fb-connect-header" id="fb-connect-header" role="button" tabindex="0" aria-expanded="true" aria-controls="fb-connect-body">
+      <h3 class="card-section-title" style="margin:0;display:flex;align-items:center;gap:0.5rem;">
+        <span class="fb-connect-caret" aria-hidden="true">▾</span>
+        Connect Flying Blue <span style="font-weight:400;color:var(--color-text-muted);font-size:0.85rem;">(optional)</span>
+        <span id="fb-connect-status" class="fb-connect-status {% if has_cookies %}fb-connect-active{% else %}fb-connect-inactive{% endif %}">{% if has_cookies %}Active{% else %}Not configured{% endif %}</span>
+      </h3>
+    </div>
+    <div id="fb-connect-body" class="fb-connect-body">
+    <p class="table-hint" style="margin:0.75rem 0 0.5rem;">
+      Some routes (e.g. AMS→CPT) need login. To get the cURL:
+      <br>1. Log in to <a href="https://www.klm.se" target="_blank" rel="noopener">klm.se</a> and open the award calendar (Use your Miles).
+      <br>2. Open DevTools (F12) → Network tab. Trigger a search that returns data (e.g. AMS→CPT).
+      <br>3. Find the <code>SharedSearchLowestFareOffersForSearchQuery</code> request → Right‑click → Copy → Copy as cURL.
+      <br>4. Paste the full cURL below — we extract cookies automatically.
+    </p>
+    <form method="post" action="/partner-awards/flyingblue/cookies" id="fb-cookies-form">
+      <textarea name="cookie_string" id="fb-cookie-input" placeholder="Paste full cURL (Copy as cURL) or cookie string" rows="4" style="width:100%;max-width:40rem;font-family:monospace;font-size:0.75rem;padding:0.5rem;border:1px solid var(--color-border-default);border-radius:4px;resize:vertical;"></textarea>
+      <div style="margin-top:0.5rem;display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+        <button type="submit" class="btn-secondary">Save cookies</button>
+        <button type="button" class="btn-secondary" id="fb-cookies-clear">Clear</button>
+        <button type="button" class="btn-secondary" id="fb-cookies-test" title="Run AMS→CPT probe (~15s)">Test connection</button>
+        <span id="fb-cookies-configured" style="font-size:0.85rem;color:var(--color-text-success);{% if not has_cookies %}display:none;{% endif %}">✓ Cookies configured</span>
+        <span id="fb-cookies-save-status" style="font-size:0.85rem;margin-left:0.25rem;"></span>
+      </div>
+    </form>
+    <p id="fb-cookies-test-status" style="margin:0.5rem 0 0;font-size:0.85rem;display:none;"></p>
+    <p class="table-hint" style="margin:0.5rem 0 0;font-size:0.8rem;color:var(--color-text-muted);">Test runs locally. AF/KLM often blocks private IPs; if Test fails, cookies are likely fine — run the worker on a VPS for real scans.</p>
+    </div>
+  </div>
+</div>
 
-    <h3 class="card-section-title" style="margin-top:1.5rem;">Batch scan</h3>
+<div class="card" style="margin-top:1rem;">
+  <div class="card-inner">
+    <h3 class="card-section-title">Run scan</h3>
+    {% set enabled_count = watch_routes|selectattr('enabled')|list|length %}
+    {% set est_min = [1, enabled_count * 3]|max %}
+    <p class="table-hint" style="margin:0 0 0.5rem;font-size:0.9rem;">
+      {% if enabled_count %}<strong>{{ enabled_count }}</strong> active route{{ 's' if enabled_count != 1 else '' }} · Est. ~{{ est_min }} min{% else %}No active routes · enable routes below to scan{% endif %}
+    </p>
     <form method="post" action="/partner-awards/flyingblue/run-batch" style="margin-bottom:1rem;">
-      <button type="submit" class="btn-primary">Run watchlist scan (12 months, Business + Premium)</button>
+      <label style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
+        <input type="checkbox" name="force_refresh" value="1">
+        <span>Force refresh (ignore 24h cooldown per route)</span>
+      </label>
+      <button type="submit" class="btn-primary" {% if not enabled_count %}disabled title="Enable at least one route below"{% endif %}>Start run (12 months, Business + Premium)</button>
     </form>
     {% if latest_job %}
     <div class="table-hint" style="margin:0 0 0.5rem;padding:0.5rem;background:var(--color-bg-secondary,#f8f9fa);border-radius:4px;">
-      <strong>Latest job:</strong> {{ latest_job.status }} · {{ latest_job.progress.done_tasks or 0 }}/{{ latest_job.progress.total_tasks or 0 }}
+      <strong>Latest job:</strong> {{ latest_job.status }} · {{ latest_job.progress.done_tasks or 0 }}/{{ latest_job.progress.total_tasks or 0 }}{% if latest_job.progress.skipped_tasks %} · {{ latest_job.progress.skipped_tasks }} skipped (24h){% endif %}
       {% if latest_job.progress.current_task %} · {{ latest_job.progress.current_task }}{% endif %}
       · <a href="/partner-awards/jobs/{{ latest_job.id }}">Detail</a>
       {% if latest_job.last_error %}
@@ -74,236 +115,457 @@
     {% else %}
     <p class="table-hint" style="margin:0 0 1rem;font-size:0.9rem;">Run the worker: <code>python -m partner_awards.jobs_worker</code></p>
     {% endif %}
+  </div>
+</div>
 
-    <h3 class="card-section-title" style="margin-top:1.5rem;">Watchlist</h3>
-    <p class="table-hint" style="margin:0 0 0.5rem;">Scanning runs separately; this view shows what's already in DB.</p>
-    <form method="post" action="/partner-awards/watchlist/add" class="toolbar filters" style="margin-bottom:1rem;">
-      <input type="hidden" name="program" value="flyingblue">
-      <input type="text" name="origin" placeholder="Origin (e.g. AMS)" maxlength="4" style="width:5rem;">
-      <input type="text" name="destination" placeholder="Dest (e.g. JNB)" maxlength="4" style="width:5rem;">
-      <button type="submit" class="btn-secondary">Add route</button>
-    </form>
+<div class="card" style="margin-top:1rem;">
+  <div class="card-inner">
+    <h3 class="card-section-title">Watchlist</h3>
+    <p class="table-hint" style="margin:0 0 0.5rem;">Add, enable, disable, or remove routes.</p>
+    <div class="toolbar filters" style="margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem;">
+      <form method="post" action="/partner-awards/watchlist/add" style="display:inline-flex;align-items:center;gap:0.5rem;">
+        <input type="hidden" name="program" value="flyingblue">
+        <label>
+          <select name="origin" required>
+            <option value="AMS">AMS</option>
+            <option value="PAR">PAR</option>
+          </select>
+        </label>
+        <input type="text" name="destination" placeholder="Dest (e.g. JNB)" maxlength="4" style="width:5rem;">
+        <button type="submit" class="btn-secondary">Add route</button>
+      </form>
+      <form method="post" action="/partner-awards/watchlist/seed-recommended" style="display:inline;">
+        <button type="submit" class="btn-secondary" title="Add 20 pre-defined routes (AMS/PAR→JNB, CPT, BKK, etc.) to your watchlist. Does not run a scan — use Start run after.">Populate routes from template</button>
+      </form>
+    </div>
     {% if watch_routes %}
-    <ul style="margin:0;padding:0;list-style:none;">
-      {% for r in watch_routes %}
-      <li style="margin:0.25rem 0;display:flex;align-items:center;gap:0.5rem;">
-        <form method="post" action="/partner-awards/watchlist/toggle" style="display:inline;">
-          <input type="hidden" name="id" value="{{ r.id }}">
-          <input type="hidden" name="enabled" value="{{ '0' if r.enabled else '1' }}">
-          <span>{{ r.origin }} → {{ r.destination }}</span>
-          <button type="submit" class="btn-secondary" style="padding:0.2rem 0.5rem;font-size:0.8rem;">
-            {{ 'Disable' if r.enabled else 'Enable' }}
-          </button>
-        </form>
-      </li>
-      {% endfor %}
-    </ul>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Origin</th>
+            <th>Destination</th>
+            <th>Enabled</th>
+            <th>Last scan</th>
+            <th>Coverage</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in watch_routes %}
+          <tr>
+            <td>{{ r.origin }}</td>
+            <td>{{ r.destination }}</td>
+            <td>
+              <form method="post" action="/partner-awards/watchlist/toggle" style="display:inline;">
+                <input type="hidden" name="id" value="{{ r.id }}">
+                <input type="hidden" name="enabled" value="{{ '0' if r.enabled else '1' }}">
+                <button type="submit" class="toggle-switch {% if r.enabled %}toggle-on{% endif %}" title="{{ 'On – tap to turn off' if r.enabled else 'Off – tap to turn on' }}" aria-label="{{ 'On' if r.enabled else 'Off' }}"></button>
+              </form>
+            </td>
+            <td>{{ r.last_scan_at[:16] if r.last_scan_at else '—' }}</td>
+            <td>{{ r.coverage_days }}/{{ r.coverage_total }}</td>
+            <td>
+              <form method="post" action="/partner-awards/watchlist/remove" style="display:inline;">
+                <input type="hidden" name="id" value="{{ r.id }}">
+                <button type="submit" class="btn-remove" title="Remove route" onclick="return confirm('Are you sure you want to remove this route?');">×</button>
+              </form>
+              <a href="/partner-awards/calendar?origin={{ r.origin }}&destination={{ r.destination }}&month={{ month }}&cabin={{ cabin }}" style="margin-left:0.5rem;font-size:0.85rem;">Calendar</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
     {% else %}
     <p class="table-hint" style="color:var(--color-text-muted);">No routes in watchlist. Add origin and destination above.</p>
     {% endif %}
   </div>
 </div>
 
+{% if suggested_routes %}
 <div class="card" style="margin-top:1rem;">
   <div class="card-inner">
-    <h3 class="card-section-title">Quick stats</h3>
-    <p style="margin:0;">
-      Cheapest this month across watchlist: <strong>from {{ stats.global_min_miles or '—' }} miles</strong>
-      {% if stats.days_at_min %} · {{ stats.days_at_min }} day(s) at min{% endif %}
-      · Routes enabled: {{ watch_routes|selectattr('enabled')|list|length }}
-      · Days with data: {{ stats.total_days }}
-    </p>
-  </div>
-</div>
-
-<div class="card" style="margin-top:1rem;">
-  <div class="card-inner">
-    <h3 class="card-section-title">Top deals</h3>
-    {% if top_deals %}
+    <h3 class="card-section-title">Suggested routes</h3>
+    <p class="table-hint" style="margin:0 0 0.5rem;">Top destinations by best miles and green days (from discovery).</p>
     <div class="table-wrapper">
       <table>
         <thead>
           <tr>
-            <th>Miles</th>
-            <th>Date</th>
-            <th>Route</th>
-            <th>Source</th>
-            <th>Updated</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for d in top_deals %}
-          <tr>
-            <td>{{ d.miles }}</td>
-            <td>{{ d.depart_date }}</td>
-            <td>{{ d.origin }} → {{ d.destination }}</td>
-            <td>{{ d.host_used or '—' }}</td>
-            <td style="font-size:0.75rem;color:var(--color-text-muted);">{{ d.updated_at or '—' }}</td>
-            <td>
-              <a href="/partner-awards/calendar?origin={{ d.origin }}&destination={{ d.destination }}&month={{ month }}&cabin={{ cabin }}">Open calendar</a>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% else %}
-    <p class="table-hint" style="color:var(--color-text-muted);">No deals yet. Add routes to watchlist, run calendar scan, then refresh.</p>
-    <p class="table-hint"><a href="/partner-awards/flyingblue/ingest">Import & test ingest</a> · <a href="/partner-awards/calendar">Calendar Fares</a></p>
-    {% endif %}
-  </div>
-</div>
-
-<div class="card" style="margin-top:1rem;">
-  <div class="card-inner">
-    <h3 class="card-section-title">Route discovery</h3>
-    <p class="table-hint" style="margin:0 0 0.75rem;">Which destinations look most interesting from selected origins? Based on data already in DB (no live fetch). Ranked by best miles, then green days (days at monthly min).</p>
-    <form method="get" action="" class="toolbar filters" style="margin-bottom:1rem;">
-      <input type="hidden" name="month" value="{{ month }}">
-      <input type="hidden" name="cabin" value="{{ cabin }}">
-      <input type="hidden" name="heatmap_watchlist" value="{{ '1' if heatmap_watchlist_only else '0' }}">
-      <input type="hidden" name="heatmap_max" value="{{ heatmap_max }}">
-      <fieldset style="border:none;padding:0;margin:0 1rem 0 0;">
-        <legend style="font-size:0.85rem;margin-bottom:0.25rem;">Origins</legend>
-        {% for orig in origins_available %}
-        <label class="tick-option" style="margin-right:0.75rem;">
-          <input type="checkbox" name="discovery_origin" value="{{ orig }}" {% if orig in discovery_origins %}checked{% endif %}>
-          {{ orig }}
-        </label>
-        {% endfor %}
-        {% if not origins_available %}
-        <span style="color:var(--color-text-muted);font-size:0.9rem;">No origin data yet. Run calendar scan first.</span>
-        {% endif %}
-      </fieldset>
-      <label>
-        Months
-        <select name="discovery_months" style="width:7rem;">
-          <option value="1" {% if discovery_months_mode == '1' %}selected{% endif %}>Last 1</option>
-          <option value="3" {% if discovery_months_mode == '3' %}selected{% endif %}>Last 3</option>
-          <option value="6" {% if discovery_months_mode == '6' %}selected{% endif %}>Last 6</option>
-          <option value="12" {% if discovery_months_mode == '12' %}selected{% endif %}>Last 12</option>
-          <option value="all" {% if discovery_months_mode == 'all' %}selected{% endif %}>All</option>
-        </select>
-      </label>
-      {% if discovery_months_used %}
-      <span style="font-size:0.8rem;color:var(--color-text-muted);margin-left:0.5rem;">Analysis: {{ discovery_months_used|join(', ') }}</span>
-      {% endif %}
-      <label>
-        Limit
-        <input type="number" name="discovery_limit" value="{{ discovery_limit }}" min="5" max="100" style="width:4rem;">
-      </label>
-      <button type="submit" class="btn-secondary">Refresh discovery</button>
-    </form>
-    {% if route_discovery %}
-    {% for origin, origin_rows in route_discovery %}
-    {% if origin_rows %}
-    <h4 style="margin:1rem 0 0.5rem;">From {{ origin }}</h4>
-    <div class="table-wrapper">
-      <table>
-        <thead>
-          <tr>
+            <th>Origin</th>
             <th>Destination</th>
             <th>Best miles</th>
             <th>Green days</th>
             <th>Coverage</th>
-            <th>Months</th>
             <th></th>
           </tr>
         </thead>
         <tbody>
-          {% for r in origin_rows %}
+          {% for r in suggested_routes %}
           <tr>
+            <td>{{ r.origin }}</td>
             <td>{{ r.destination }}</td>
             <td>{{ r.best_miles }}</td>
             <td>{{ r.green_days_count }}</td>
             <td>{{ r.coverage_days }}</td>
-            <td>{{ r.months_count }}</td>
             <td>
-              <form method="post" action="/partner-awards/watchlist/add" style="display:inline;">
-                <input type="hidden" name="program" value="flyingblue">
-                <input type="hidden" name="origin" value="{{ r.origin }}">
-                <input type="hidden" name="destination" value="{{ r.destination }}">
-                <button type="submit" class="btn-secondary" style="padding:0.2rem 0.5rem;font-size:0.8rem;">Add to watchlist</button>
-              </form>
+              <a href="/partner-awards/calendar?origin={{ r.origin }}&destination={{ r.destination }}&month={{ month }}&cabin={{ cabin }}">Open calendar</a>
             </td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
-    {% endif %}
-    {% endfor %}
-    {% else %}
-    <p class="table-hint" style="color:var(--color-text-muted);">No discovery data. Ensure calendar_fares has data for selected origins; run scans and import.</p>
-    {% endif %}
   </div>
 </div>
+{% endif %}
+{% endif %}
 
-<div class="card" style="margin-top:1rem;">
+{% if tab == 'calendar' %}
+{# Calendar tab: 365-day year view. Route (top) + Cabin + Year #}
+<div class="card">
   <div class="card-inner">
-    <h3 class="card-section-title">Heatmap</h3>
-    <p class="table-hint" style="margin:0 0 0.75rem;">Route × day-of-month grid for {{ month }} · {{ cabin }}. Min miles per route highlighted in green.</p>
-    <form method="get" action="" class="toolbar filters" style="margin-bottom:0.75rem;">
-      {% for o in discovery_origins %}
-      <input type="hidden" name="discovery_origin" value="{{ o }}">
-      {% endfor %}
-      <input type="hidden" name="month" value="{{ month }}">
-      <input type="hidden" name="cabin" value="{{ cabin }}">
-      <input type="hidden" name="discovery_months" value="{{ discovery_months_mode }}">
-      <input type="hidden" name="discovery_limit" value="{{ discovery_limit }}">
+    <h3 class="card-section-title">365-day calendar</h3>
+    <form method="get" action="" class="toolbar filters" style="margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem;">
+      <input type="hidden" name="tab" value="calendar">
+      {% if calendar_route_options %}
       <label>
-        Routes
-        <select name="heatmap_watchlist" onchange="this.form.submit()" style="width:11rem;">
-          <option value="1" {% if heatmap_watchlist_only %}selected{% endif %}>Enabled watchlist only</option>
-          <option value="0" {% if not heatmap_watchlist_only %}selected{% endif %}>All watchlist routes</option>
+        Route
+        <select name="route" onchange="this.form.submit()" style="width:11rem;">
+          {% for val, lbl in calendar_route_options %}
+          <option value="{{ val }}" {% if route_filter == val %}selected{% endif %}>{{ lbl }}</option>
+          {% endfor %}
         </select>
       </label>
+      {% endif %}
       <label>
-        Max routes
-        <select name="heatmap_max" onchange="this.form.submit()" style="width:5rem;">
-          <option value="15" {% if heatmap_max == 15 %}selected{% endif %}>15</option>
-          <option value="25" {% if heatmap_max == 25 %}selected{% endif %}>25</option>
-          <option value="40" {% if heatmap_max == 40 %}selected{% endif %}>40</option>
-          <option value="60" {% if heatmap_max == 60 %}selected{% endif %}>60</option>
+        Cabin
+        <select name="cabin" onchange="this.form.submit()">
+          <option value="BUSINESS" {% if cabin == 'BUSINESS' %}selected{% endif %}>Business</option>
+          <option value="PREMIUM" {% if cabin == 'PREMIUM' %}selected{% endif %}>Premium Economy</option>
         </select>
       </label>
     </form>
-    {% if heatmap.rows %}
-    <p class="table-hint" style="margin:0 0 0.5rem;font-size:0.85rem;">Routes shown: {{ heatmap.rows|length }} · Click a route to open calendar</p>
-    <div class="table-wrapper" style="overflow-x:auto;">
-      <table class="heatmap-table">
+    {% if flyingblue_year_calendar %}
+    <p class="table-hint table-hint-compact" style="margin:0 0 0.75rem;">
+      Daily miles ({{ route_filter|replace('-', '→') }}). Today + 1 year.
+    </p>
+    <p class="table-hint" style="margin:0 0 0.5rem;font-size:0.8rem;">Legend: <span class="hm-legend hm-legend-green">cheapest</span> <span class="hm-legend hm-legend-blue">mid</span> <span class="hm-legend hm-legend-red">high</span> <span class="hm-legend hm-legend-empty">no data</span></p>
+    <style>
+      .fb-year-cal-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 1rem; }
+      .fb-year-cal-grid .month-card { min-width: 0; padding: 0.6rem; }
+      .fb-year-cal-grid .month-weekday-headers { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.25rem; margin-bottom: 0.25rem; }
+      .fb-year-cal-grid .calendar-weekday-header { font-size: 0.65rem; font-weight: 600; color: var(--color-text-secondary); text-align: center; }
+      .fb-year-cal-grid .month-days { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.25rem; }
+      .fb-year-cal-grid .calendar-day { min-height: 38px; padding: 0.2rem 0.1rem; color: #000; }
+      .fb-year-cal-grid .calendar-day-blank { border: none; background: transparent; min-height: 38px; }
+      .fb-year-cal-grid .calendar-day-num { font-size: 0.7rem; }
+      .fb-year-cal-grid .calendar-day-badge { font-size: 0.7rem; }
+      /* 3 price bands: green = cheapest, blue = mid, light red = high. Black text. */
+      .fb-year-cal-grid .calendar-day.hm-min { background: #c8e6c9 !important; color: #000 !important; }
+      .fb-year-cal-grid .calendar-day.hm-low,
+      .fb-year-cal-grid .calendar-day.hm-mid { background: #bbdefb !important; color: #000 !important; }
+      .fb-year-cal-grid .calendar-day.hm-high { background: #ffcdd2 !important; color: #000 !important; }
+      .fb-year-cal-grid .calendar-day.hm-empty { background: #eeeeee !important; color: #000 !important; }
+      .hm-legend-green { background: #c8e6c9; color: #000; }
+      .hm-legend-blue { background: #bbdefb; color: #000; }
+      .hm-legend-red { background: #ffcdd2; color: #000; }
+      .hm-legend-empty { background: #eeeeee; color: #000; }
+    </style>
+    <div class="year-cal-grid fb-year-cal-grid">
+      {% for month in flyingblue_year_calendar %}
+      <section class="month-card">
+        <div class="month-label">{{ month.label }}</div>
+        <div class="month-weekday-headers">
+          {% for h in month.weekday_headers %}
+          <span class="calendar-weekday-header">{{ h }}</span>
+          {% endfor %}
+        </div>
+        <div class="month-days">
+          {% for week in month.weeks %}
+          {% for cell in week %}
+          {% if cell %}
+          <div class="calendar-day {{ cell.css_class }} {% if cell.has_data %}has-data{% endif %} {% if cell.is_today %}is-today{% endif %}">
+            <div class="calendar-day-num">{{ cell.day }}</div>
+            {% if cell.has_data %}
+            <span class="calendar-day-badge calendar-day-badge-out">{{ cell.display }}</span>
+            {% endif %}
+          </div>
+          {% else %}
+          <div class="calendar-day calendar-day-blank"></div>
+          {% endif %}
+          {% endfor %}
+          {% endfor %}
+        </div>
+      </section>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="table-hint" style="color:var(--color-text-muted);">
+      {% if not watch_routes %}
+      No watchlist routes. <a href="?tab=routes">Add routes</a> in the Routes tab first.
+      {% else %}
+      No data. Add routes and run scan.
+      {% endif %}
+    </p>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% if tab == 'windows' %}
+{# Windows tab: round-trip search #}
+<div class="card">
+  <div class="card-inner">
+    <h3 class="card-section-title">Round-trip windows</h3>
+    <p class="table-hint" style="margin:0 0 0.75rem;">Find outbound + inbound pairs within trip length. Excellent = both ≤1.15× route min; Good = one ≤ min.</p>
+    <form method="get" action="" class="toolbar filters" style="margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem;">
+      <input type="hidden" name="tab" value="windows">
+      <label>
+        Origin
+        {% if win_origins %}
+        <select name="win_origin" onchange="this.form.submit()" style="width:5rem;">
+          {% for o in win_origins %}
+          <option value="{{ o }}" {% if win_origin == o %}selected{% endif %}>{{ o }}</option>
+          {% endfor %}
+        </select>
+        {% else %}
+        <input type="text" name="win_origin" value="{{ win_origin }}" placeholder="AMS" maxlength="4" style="width:4rem;">
+        {% endif %}
+      </label>
+      <label>
+        Destination
+        {% if win_dests_for_origin %}
+        <select name="win_dest" style="width:5rem;">
+          {% for d in win_dests_for_origin %}
+          <option value="{{ d }}" {% if win_dest == d %}selected{% endif %}>{{ d }}</option>
+          {% endfor %}
+        </select>
+        {% else %}
+        <input type="text" name="win_dest" value="{{ win_dest }}" placeholder="JNB" maxlength="4" style="width:4rem;">
+        {% endif %}
+      </label>
+      <label>
+        Cabin
+        <select name="cabin">
+          <option value="BUSINESS" {% if cabin == 'BUSINESS' %}selected{% endif %}>Business</option>
+          <option value="PREMIUM" {% if cabin == 'PREMIUM' %}selected{% endif %}>Premium Economy</option>
+        </select>
+      </label>
+      <label>
+        Month
+        <select name="month" style="width:10rem;">
+          {% for m in months_all %}
+          <option value="{{ m }}" {% if month == m %}selected{% endif %}>{{ m }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        Trip length
+        <select name="win_trip" id="win-trip-select">
+          <option value="weekend" {% if win_trip == 'weekend' %}selected{% endif %}>Weekend (2–4 nights)</option>
+          <option value="5-7" {% if win_trip == '5-7' %}selected{% endif %}>5–7 days</option>
+          <option value="custom" {% if win_trip == 'custom' %}selected{% endif %}>Custom (3–10)</option>
+        </select>
+      </label>
+      <span id="win-custom-range" style="display:{% if win_trip == 'custom' %}inline-flex{% else %}none{% endif %};;align-items:center;gap:0.25rem;">
+        <input type="number" name="win_nights_min" value="{{ win_nights_min }}" min="3" max="10" style="width:3rem;">
+        <span>–</span>
+        <input type="number" name="win_nights_max" value="{{ win_nights_max }}" min="3" max="10" style="width:3rem;"> nights
+      </span>
+      <button type="submit" class="btn-primary">Search</button>
+    </form>
+    {% if windows_pairs %}
+    <div class="table-wrapper">
+      <table>
         <thead>
           <tr>
-            <th class="hm-route-col">Route</th>
-            {% for d in heatmap.days %}
-            <th class="hm-day-col">{{ d }}</th>
-            {% endfor %}
+            <th>Out</th>
+            <th>In</th>
+            <th>Nights</th>
+            <th>Out miles</th>
+            <th>In miles</th>
+            <th>Total</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
-          {% for row in heatmap.rows %}
-          <tr>
-            <td class="hm-route-col">
-              <a href="/partner-awards/calendar?origin={{ row.origin }}&destination={{ row.destination }}&month={{ month }}&cabin={{ cabin }}">{{ row.origin }}→{{ row.destination }}</a>
-            </td>
-            {% for d in heatmap.days %}
-            <td class="hm-cell {{ row.css_classes.get(d, 'hm-empty') }}" title="{{ row.origin }}→{{ row.destination }} day {{ d }}">
-              <a href="/partner-awards/calendar?origin={{ row.origin }}&destination={{ row.destination }}&month={{ month }}&cabin={{ cabin }}">{{ row.display_values.get(d, '—') }}</a>
-            </td>
-            {% endfor %}
+          {% for p in windows_pairs %}
+          <tr class="{% if p.is_excellent %}windows-excellent{% elif p.is_good %}windows-good{% endif %}">
+            <td>{{ p.out_date }}</td>
+            <td>{{ p.in_date }}</td>
+            <td>{{ p.nights }}</td>
+            <td>{{ p.out_miles }}</td>
+            <td>{{ p.in_miles }}</td>
+            <td>{{ p.total_miles }}</td>
+            <td>{% if p.is_excellent %}Excellent{% elif p.is_good %}Good{% endif %}</td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
-    <p class="table-hint" style="margin-top:0.5rem;font-size:0.8rem;">Legend: <span class="hm-legend hm-min">min</span> <span class="hm-legend hm-low">≤1.1×</span> <span class="hm-legend hm-mid">≤1.3×</span> <span class="hm-legend hm-high">higher</span> <span class="hm-legend hm-empty">no data</span></p>
+    {% elif win_dest %}
+    <p class="table-hint" style="color:var(--color-text-muted);">No round-trip pairs found for {{ win_origin }}↔{{ win_dest }} in {{ month }}. Try another month or route.</p>
     {% else %}
-    <p class="table-hint" style="color:var(--color-text-muted);">No heatmap data. Add routes to watchlist and ensure calendar scans have run for {{ month }}.</p>
+    <p class="table-hint" style="color:var(--color-text-muted);">Enter origin and destination above, then click Search.</p>
     {% endif %}
   </div>
 </div>
+{% endif %}
+
+<p style="margin-top:1.5rem;font-size:0.8rem;color:var(--color-text-muted);">
+  <a href="/partner-awards/flyingblue/ingest">Admin: Ingest</a> · <a href="/partner-awards/calendar">Calendar</a> · <a href="/partner-awards/jobs">Batch Jobs</a>
+</p>
+
+<script>
+(function() {
+  var form = document.getElementById('fb-cookies-form');
+  var input = document.getElementById('fb-cookie-input');
+  var clearBtn = document.getElementById('fb-cookies-clear');
+  var testBtn = document.getElementById('fb-cookies-test');
+  var status = document.getElementById('fb-cookies-test-status');
+  var saveStatus = document.getElementById('fb-cookies-save-status');
+  var configuredSpan = document.getElementById('fb-cookies-configured');
+  var connectHeader = document.getElementById('fb-connect-header');
+  var connectBody = document.getElementById('fb-connect-body');
+  var connectCard = document.getElementById('fb-connect-card');
+  var tripSelect = document.getElementById('win-trip-select');
+  var customRange = document.getElementById('win-custom-range');
+
+  function submitCookiesViaFetch(cookieValue, done) {
+    var fd = new FormData();
+    fd.append('cookie_string', cookieValue || '');
+    fetch(form.action, {
+      method: 'POST',
+      body: fd,
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    }).then(function(r) { return r.json(); }).then(function(d) {
+      if (saveStatus) {
+        saveStatus.textContent = d.ok ? d.message : (d.message || 'Error');
+        saveStatus.style.color = d.ok ? 'var(--color-text-success)' : 'var(--color-text-danger)';
+        saveStatus.style.display = 'inline';
+        if (d.ok && configuredSpan) configuredSpan.style.display = d.has_cookies ? 'inline' : 'none';
+        var statusBadge = document.getElementById('fb-connect-status');
+        if (d.ok && statusBadge) {
+          statusBadge.textContent = d.has_cookies ? 'Active' : 'Not configured';
+          statusBadge.className = 'fb-connect-status ' + (d.has_cookies ? 'fb-connect-active' : 'fb-connect-inactive');
+        }
+        setTimeout(function() { saveStatus.textContent = ''; saveStatus.style.display = ''; }, 3000);
+      }
+      if (done) done(d);
+    }).catch(function(e) {
+      if (saveStatus) {
+        saveStatus.textContent = 'Failed: ' + (e.message || 'Request failed');
+        saveStatus.style.color = 'var(--color-text-danger)';
+        saveStatus.style.display = 'inline';
+        setTimeout(function() { saveStatus.textContent = ''; saveStatus.style.display = ''; }, 5000);
+      }
+      if (done) done({ ok: false });
+    });
+  }
+
+  if (form) {
+    form.onsubmit = function(e) {
+      e.preventDefault();
+      submitCookiesViaFetch(input ? input.value : '');
+    };
+  }
+
+  if (clearBtn && input && form) {
+    clearBtn.onclick = function() {
+      input.value = '';
+      submitCookiesViaFetch('');
+    };
+  }
+
+  if (testBtn && status) {
+    testBtn.onclick = function() {
+      testBtn.disabled = true;
+      status.textContent = 'Testing AMS→CPT… (~15s)';
+      status.style.display = 'block';
+      status.style.color = '';
+
+      fetch('/partner-awards/flyingblue/cookies/test', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          status.textContent = d.ok ? '✓ ' + d.message : '✗ ' + (d.message || 'Failed');
+          status.style.color = d.ok ? 'var(--color-text-success)' : 'var(--color-text-danger)';
+        })
+        .catch(function(e) {
+          status.textContent = '✗ ' + (e.message || 'Request failed');
+          status.style.color = 'var(--color-text-danger)';
+        })
+        .finally(function() { testBtn.disabled = false; });
+    };
+  }
+
+  if (tripSelect && customRange) {
+    tripSelect.addEventListener('change', function() {
+      customRange.style.display = tripSelect.value === 'custom' ? 'inline-flex' : 'none';
+    });
+  }
+
+  if (connectHeader && connectBody && connectCard) {
+    var collapsed = localStorage.getItem('fb-connect-collapsed') === '1';
+    if (collapsed) {
+      connectBody.style.display = 'none';
+      connectCard.classList.add('fb-connect-collapsed');
+      connectHeader.querySelector('.fb-connect-caret').textContent = '▸';
+      connectHeader.setAttribute('aria-expanded', 'false');
+    }
+    connectHeader.onclick = function() { connectHeader.focus(); };
+    connectHeader.addEventListener('click', function() {
+      collapsed = !collapsed;
+      connectBody.style.display = collapsed ? 'none' : 'block';
+      connectCard.classList.toggle('fb-connect-collapsed', collapsed);
+      connectHeader.querySelector('.fb-connect-caret').textContent = collapsed ? '▸' : '▾';
+      connectHeader.setAttribute('aria-expanded', String(!collapsed));
+      localStorage.setItem('fb-connect-collapsed', collapsed ? '1' : '0');
+    });
+    connectHeader.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); connectHeader.click(); }
+    });
+  }
+
+  // Toggle watchlist via fetch to avoid page reload and scroll reset
+  document.addEventListener('submit', function(e) {
+    var form = e.target;
+    if (form.method === 'post' && form.action && form.action.indexOf('/partner-awards/watchlist/toggle') !== -1) {
+      e.preventDefault();
+      var btn = form.querySelector('button.toggle-switch');
+      var fd = new FormData(form);
+      fetch(form.action, { method: 'POST', body: fd, redirect: 'manual' })
+        .then(function(res) {
+          if (res.type === 'opaqueredirect' || res.status === 0 || res.status === 302) {
+            btn.classList.toggle('toggle-on');
+            var isOn = btn.classList.contains('toggle-on');
+            btn.title = isOn ? 'On – tap to turn off' : 'Off – tap to turn on';
+            btn.setAttribute('aria-label', isOn ? 'On' : 'Off');
+            var enabledInput = form.querySelector('input[name="enabled"]');
+            if (enabledInput) enabledInput.value = isOn ? '1' : '0';
+          }
+        })
+        .catch(function() { form.submit(); });
+    }
+  });
+})();
+</script>
 <style>
+.fb-connect-header { cursor: pointer; padding: 0.25rem 0; user-select: none; }
+.fb-connect-header:hover { opacity: 0.85; }
+.fb-connect-caret { font-size: 0.75rem; color: var(--color-text-muted); transition: transform 0.2s; }
+.fb-connect-status { font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.04em; }
+.fb-connect-active { background: rgba(52, 199, 89, 0.15); color: var(--color-text-success); }
+.fb-connect-inactive { background: var(--color-bg-soft); color: var(--color-text-muted); }
+.btn-remove {
+  width: 1.25rem; height: 1.25rem; padding: 0; font-size: 1rem; line-height: 1;
+  color: var(--color-text-danger); background: transparent; border: 1px solid var(--color-border-default);
+  border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+}
+.btn-remove:hover { background: rgba(200,0,0,0.08); }
+.report-tabs a { display:inline-block; padding:0.5rem 1rem; margin-right:0.25rem; text-decoration:none; color:var(--color-text-secondary); border-radius:4px 4px 0 0; }
+.report-tabs a:hover { background:var(--color-bg-secondary); color:var(--color-text-primary); }
+.report-tabs a.active { background:var(--color-bg-primary); color:var(--color-text-primary); font-weight:600; border-bottom:2px solid var(--color-bg-primary); margin-bottom:-1px; }
 .heatmap-table { font-size:0.8rem; border-collapse:collapse; }
 .heatmap-table th, .heatmap-table td { padding:0.15rem 0.35rem; border:1px solid var(--color-border-subtle, #ddd); text-align:center; }
 .hm-route-col { min-width:6rem; text-align:left; position:sticky; left:0; background:var(--color-bg-primary,#fff); z-index:1; }
@@ -315,6 +577,9 @@
 .hm-mid { background:#fff9c4; }
 .hm-high { background:#ffe0b2; }
 .hm-empty { background:var(--color-bg-secondary,#f5f5f5); color:var(--color-text-muted,#999); }
+.hm-no-data-badge { margin-left:0.25rem; opacity:0.7; font-size:0.7rem; }
 .hm-legend { padding:0.1rem 0.4rem; margin-right:0.5rem; border-radius:2px; font-size:0.75rem; }
+.windows-excellent { background: #d4edda !important; }
+.windows-good { background: #e8f5e9; }
 </style>
 {% endblock %}

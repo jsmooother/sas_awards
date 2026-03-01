@@ -6,6 +6,7 @@ Access from LAN: http://<macmini-ip>:5000
 import json
 import os
 import sys
+from pathlib import Path
 import datetime as _dt
 import requests
 from flask import Flask, render_template, request, jsonify, redirect, flash
@@ -138,7 +139,8 @@ def build_year_calendar_data(daily_counts, days=365):
 
 
 def build_partner_top_deals_calendar(daily_deals, days=365):
-    """Build month/day buckets for Partner top deals: each day has miles, route, is_min."""
+    """Build month calendar grids (weeks × 7 days) for Partner top deals, SAS-style."""
+    import calendar as cal_mod
     start = _dt.date.today()
     miles_list = [d["miles"] for d in daily_deals.values() if d.get("miles") is not None]
     global_min = min(miles_list, default=None)
@@ -152,8 +154,8 @@ def build_partner_top_deals_calendar(daily_deals, days=365):
         is_min = has_data and global_min is not None and miles == global_min
         key = d.strftime("%Y-%m")
         if key not in months:
-            months[key] = {"label": d.strftime("%b %Y"), "days": []}
-        months[key]["days"].append({
+            months[key] = {"label": d.strftime("%b %Y"), "year": d.year, "month": d.month, "by_day": {}}
+        months[key]["by_day"][d.day] = {
             "iso": iso,
             "day": d.strftime("%d"),
             "miles": miles,
@@ -162,8 +164,34 @@ def build_partner_top_deals_calendar(daily_deals, days=365):
             "has_data": has_data,
             "is_today": i == 0,
             "is_min": is_min,
-        })
-    return [months[k] for k in sorted(months.keys())]
+        }
+    out = []
+    for key in sorted(months.keys()):
+        m = months[key]
+        y, mo = m["year"], m["month"]
+        by_day = m["by_day"]
+        weeks = cal_mod.monthcalendar(y, mo)
+        grid = []
+        for w in weeks:
+            row = []
+            for day_num in w:
+                if day_num == 0:
+                    row.append({"day": None, "miles": None, "iso": None, "origin": "", "destination": "", "has_data": False, "is_min": False, "is_today": False})
+                else:
+                    cell = by_day.get(day_num, {})
+                    row.append({
+                        "day": day_num,
+                        "miles": cell.get("miles"),
+                        "iso": cell.get("iso"),
+                        "origin": cell.get("origin", ""),
+                        "destination": cell.get("destination", ""),
+                        "has_data": cell.get("has_data", False),
+                        "is_min": cell.get("is_min", False),
+                        "is_today": cell.get("is_today", False),
+                    })
+                grid.append(row)
+        out.append({"label": m["label"], "year": y, "month": mo, "weeks": grid})
+    return out
 
 
 def build_dual_year_calendar_data(outbound_counts, inbound_counts, days=365, min_flights=1):
@@ -352,18 +380,69 @@ def _get_runner_config_path():
     return Path(__file__).resolve().parent / "partner_awards_remote_runner" / "config.json"
 
 
+def _enrich_watch_routes_with_scan_info(conn, watch_routes, month_param):
+    """Add last_scan_at and coverage (days/total) per route."""
+    import calendar
+    try:
+        y, m = int(month_param[:4]), int(month_param[5:7])
+        month_days_total = calendar.monthrange(y, m)[1]
+    except (ValueError, IndexError):
+        month_days_total = 31
+    enriched = []
+    for r in watch_routes:
+        row = dict(r)
+        row["last_scan_at"] = None
+        row["coverage_days"] = 0
+        row["coverage_total"] = month_days_total
+        cur = conn.execute(
+            """SELECT t.finished_at FROM partner_award_job_tasks t
+               INNER JOIN partner_award_jobs j ON j.id = t.job_id AND j.program = 'flyingblue'
+               WHERE t.origin=? AND t.destination=? AND t.status='done' AND t.finished_at IS NOT NULL
+               ORDER BY t.finished_at DESC LIMIT 1""",
+            (r["origin"], r["destination"]),
+        )
+        scan_row = cur.fetchone()
+        if scan_row:
+            row["last_scan_at"] = scan_row[0]
+        cur = conn.execute(
+            """SELECT COUNT(DISTINCT depart_date) FROM partner_award_calendar_fares
+               WHERE source='AF' AND origin=? AND destination=? AND substr(depart_date,1,7)=?
+               AND cabin_class IN ('BUSINESS','PREMIUM')""",
+            (r["origin"], r["destination"], month_param),
+        )
+        cov_row = cur.fetchone()
+        if cov_row and cov_row[0] is not None:
+            row["coverage_days"] = cov_row[0]
+        enriched.append(row)
+    return enriched
+
+
 @_partner_awards_error_handler
 @app.route("/partner-awards/flyingblue", methods=["GET"])
 def partner_awards_flyingblue():
-    """Flying Blue dashboard: 4-step workflow (Configure → Run → Review → Act)."""
+    """Flying Blue: single page with Routes | Calendar | Windows tabs."""
     import sqlite3
     from datetime import datetime
     from partner_awards.airfrance.watchlist import list_watch_routes
     from partner_awards.airfrance.top_deals import get_top_deals_for_month
+    from partner_awards.airfrance.route_discovery import months_present, discovery_multi_origin
+    from partner_awards.airfrance.heatmap import build_daily_year_calendar
+    from partner_awards.airfrance.windows import get_round_trip_pairs, get_routes_with_data
 
     db_path = _get_partner_db_path()
+    tab_param = request.args.get("tab", "routes")
+    if tab_param not in ("routes", "calendar", "windows"):
+        tab_param = "routes"
     month_param = request.args.get("month")
     cabin_param = request.args.get("cabin", "BUSINESS")
+    route_filter = request.args.get("route", "all")  # calendar: single route only
+    # Windows tab
+    win_origin = request.args.get("win_origin", "AMS")
+    win_dest = request.args.get("win_dest", "")
+    win_trip = request.args.get("win_trip", "weekend")  # weekend, 5-7, custom
+    win_nights_min = request.args.get("win_nights_min", "3")
+    win_nights_max = request.args.get("win_nights_max", "10")
+
     validation_warning = None
     if month_param and (len(month_param) != 7 or not (month_param[:4].isdigit() and month_param[5:7].isdigit() and month_param[4] == "-")):
         month_param = None
@@ -375,9 +454,18 @@ def partner_awards_flyingblue():
     watch_routes = []
     enabled_routes = []
     top_deals = []
+    suggested_routes = []
     stats = {"global_min_miles": None, "days_at_min": 0, "total_days": 0}
     months_available = []
     latest_job = None
+    heatmap = {"days": [], "rows": [], "month": "", "cabin_class": ""}
+    flyingblue_year_calendar: list = []
+    windows_pairs = []
+    origins_available = ["AMS", "PAR"]
+    routes_with_data: list[tuple[str, str]] = []
+    win_origins: list[str] = []
+    win_dests_for_origin: list[str] = []
+    calendar_route_options: list[tuple[str, str]] = []
 
     if os.path.exists(db_path):
         from partner_awards.airfrance.adapter import init_db
@@ -403,10 +491,23 @@ def partner_awards_flyingblue():
         if not month_param:
             month_param = months_available[0] if months_available else datetime.now().strftime("%Y-%m")
 
+        # Enrich watchlist with last_scan and coverage (Routes tab)
+        watch_routes = _enrich_watch_routes_with_scan_info(conn, watch_routes, month_param)
+
         if enabled_routes:
             top_deals, stats = get_top_deals_for_month(
                 conn, month_param, cabin_param, enabled_routes, limit=5
             )
+
+        # Suggested routes (discovery, limit 5)
+        disc_months = months_present(conn, cabin_param, origins_available)[:6]
+        if disc_months:
+            by_origin = discovery_multi_origin(conn, origins_available, cabin_param, disc_months, limit_per_origin=5)
+            flat = []
+            for o in origins_available:
+                flat.extend(by_origin.get(o, [])[:3])
+            flat.sort(key=lambda x: (x.get("best_miles") or 999999, x.get("destination", "")))
+            suggested_routes = flat[:5]
 
         cur = conn.execute(
             """SELECT id, program, job_type, status, created_at, started_at, finished_at,
@@ -421,6 +522,57 @@ def partner_awards_flyingblue():
                 latest_job["progress"] = json.loads(latest_job.get("progress_json") or "{}")
             except Exception:
                 latest_job["progress"] = {}
+
+        # Calendar tab: 365-day day-by-day view (single route only)
+        if tab_param == "calendar":
+            # Use routes that have data in DB (like Windows tab), not just watchlist
+            routes_with_calendar_data = get_routes_with_data(conn)
+            routes_filtered = [(o, d) for o, d in routes_with_calendar_data]
+            if not routes_filtered:
+                routes_filtered = enabled_routes if enabled_routes else [(r["origin"], r["destination"]) for r in watch_routes]
+            calendar_route_options[:] = [(f"{o}-{d}", f"{o}→{d}") for o, d in routes_filtered]
+            # Resolve selected route (single route only, no "all")
+            sel_route = None
+            if route_filter and "-" in route_filter:
+                parts = route_filter.split("-", 1)
+                if len(parts) == 2:
+                    rf = (parts[0].strip().upper(), parts[1].strip().upper())
+                    if rf in routes_filtered:
+                        sel_route = rf
+            if not sel_route and routes_filtered:
+                sel_route = routes_filtered[0]
+                route_filter = f"{sel_route[0]}-{sel_route[1]}"
+            if sel_route:
+                flyingblue_year_calendar = build_daily_year_calendar(
+                    conn, cabin_param, sel_route[0], sel_route[1]
+                )
+
+        # Windows tab: round-trip pairs + routes for dropdowns
+        if tab_param == "windows":
+            routes_with_data = get_routes_with_data(conn)
+            win_origins = sorted(set(o for o, _ in routes_with_data))
+            if win_origins and (not win_origin or win_origin not in win_origins):
+                win_origin = win_origins[0]
+            win_dests_for_origin = sorted(set(d for o, d in routes_with_data if o == win_origin))
+            if win_dests_for_origin and (not win_dest or win_dest not in win_dests_for_origin):
+                win_dest = win_dests_for_origin[0]
+        if tab_param == "windows" and month_param and win_origin and win_dest:
+            if win_trip == "weekend":
+                trip_min, trip_max = 2, 4
+            elif win_trip == "5-7":
+                trip_min, trip_max = 5, 7
+            else:
+                try:
+                    trip_min = max(3, min(10, int(win_nights_min)))
+                    trip_max = max(3, min(10, int(win_nights_max)))
+                except ValueError:
+                    trip_min, trip_max = 3, 10
+                if trip_min > trip_max:
+                    trip_min, trip_max = trip_max, trip_min
+            windows_pairs = get_round_trip_pairs(
+                conn, win_origin.strip().upper()[:4], win_dest.strip().upper()[:4],
+                cabin_param, month_param, trip_min, trip_max
+            )
 
         conn.close()
 
@@ -437,7 +589,15 @@ def partner_awards_flyingblue():
         except Exception:
             pass
 
-    # Full list of next 12 months for dropdown
+    blocked_until = None
+    try:
+        from partner_awards.airfrance.state import is_blocked
+        blocked, until = is_blocked()
+        if blocked:
+            blocked_until = until
+    except Exception:
+        pass
+
     now = datetime.now()
     months_all = []
     y, m = now.year, now.month
@@ -450,8 +610,10 @@ def partner_awards_flyingblue():
 
     return render_template(
         "partner_awards_flyingblue.html",
+        tab=tab_param,
         watch_routes=watch_routes,
         top_deals=top_deals,
+        suggested_routes=suggested_routes,
         stats=stats,
         month=month_param,
         cabin=cabin_param,
@@ -460,6 +622,19 @@ def partner_awards_flyingblue():
         validation_warning=validation_warning,
         has_cookies=has_cookies,
         data_freshness=_flyingblue_data_freshness(db_path, enabled_routes if os.path.exists(db_path) else [], month_param),
+        flyingblue_year_calendar=flyingblue_year_calendar,
+        route_filter=route_filter,
+        calendar_route_options=calendar_route_options,
+        routes_with_data=routes_with_data,
+        win_origins=win_origins,
+        win_dests_for_origin=win_dests_for_origin,
+        windows_pairs=windows_pairs,
+        win_origin=win_origin,
+        win_dest=win_dest,
+        win_trip=win_trip,
+        win_nights_min=win_nights_min,
+        win_nights_max=win_nights_max,
+        blocked_until=blocked_until,
     )
 
 
@@ -516,171 +691,6 @@ def _flyingblue_data_freshness(db_path, enabled_routes, month_param):
     return out
 
 
-@_partner_awards_error_handler
-@app.route("/partner-awards/flyingblue/reports", methods=["GET"])
-def partner_awards_flyingblue_reports():
-    """Flying Blue reports: Summary (default), Year view, Discovery, Heatmap."""
-    import sqlite3
-    from datetime import datetime
-    from partner_awards.airfrance.watchlist import list_watch_routes
-    from partner_awards.airfrance.top_deals import get_top_deals_for_month, get_top_deals_for_year
-    from partner_awards.airfrance.route_discovery import months_present, discovery_multi_origin
-    from partner_awards.airfrance.heatmap import build_heatmap
-    from partner_awards.airfrance.calendar_delta import (
-        get_scan_runs_for_month,
-        get_month_fares_by_scan_run,
-        compute_month_delta,
-        build_telegram_month_text,
-    )
-
-    db_path = _get_partner_db_path()
-    month_param = request.args.get("month")
-    cabin_param = request.args.get("cabin", "BUSINESS")
-    tab_param = request.args.get("tab", "summary")
-    if tab_param not in ("summary", "year-view", "discovery", "heatmap"):
-        tab_param = "summary"
-    discovery_origins = request.args.getlist("discovery_origin") or ["AMS", "PAR"]
-    discovery_months_mode = request.args.get("discovery_months", "6")
-    discovery_limit = int(request.args.get("discovery_limit", 20))
-    heatmap_watchlist_only = request.args.get("heatmap_watchlist", "1") in ("1", "true", "on", "yes")
-    heatmap_max = int(request.args.get("heatmap_max", 25))
-
-    if month_param and (len(month_param) != 7 or not (month_param[:4].isdigit() and month_param[5:7].isdigit() and month_param[4] == "-")):
-        month_param = None
-    if cabin_param not in ("BUSINESS", "PREMIUM"):
-        cabin_param = "BUSINESS"
-
-    watch_routes = []
-    enabled_routes = []
-    top_deals = []
-    top_deals_calendar = []
-    stats = {"global_min_miles": None, "days_at_min": 0, "total_days": 0}
-    route_discovery = []
-    discovery_months_present = []
-    discovery_months_used = []
-    origins_available = ["AMS", "PAR"]
-    heatmap = {"days": [], "rows": [], "month": "", "cabin_class": ""}
-    summary_data = {"top_deals": [], "biggest_drops": [], "coverage": {}, "delta_routes": []}
-
-    if os.path.exists(db_path):
-        from partner_awards.airfrance.adapter import init_db
-        conn = sqlite3.connect(db_path)
-        init_db(conn)
-        conn.row_factory = sqlite3.Row
-        watch_routes = list_watch_routes(conn, "flyingblue")
-        enabled_routes = [(r["origin"], r["destination"]) for r in watch_routes if r["enabled"]]
-
-        if enabled_routes:
-            route_conds = " OR ".join("(origin=? AND destination=?)" for _ in enabled_routes)
-            route_params = [p for pair in enabled_routes for p in pair]
-            months_cur = conn.execute(
-                f"""SELECT DISTINCT substr(depart_date, 1, 7) as ym
-                   FROM partner_award_calendar_fares WHERE source='AF' AND ({route_conds})
-                   ORDER BY ym DESC LIMIT 24""",
-                route_params,
-            )
-            months_available = [r[0] for r in months_cur.fetchall() if r[0]]
-        else:
-            months_available = []
-
-        if not month_param:
-            month_param = months_available[0] if months_available else datetime.now().strftime("%Y-%m")
-
-        if enabled_routes:
-            top_deals, stats = get_top_deals_for_month(
-                conn, month_param, cabin_param, enabled_routes, limit=20
-            )
-            biz_deals, _ = get_top_deals_for_month(conn, month_param, "BUSINESS", enabled_routes, limit=15)
-            prem_deals, _ = get_top_deals_for_month(conn, month_param, "PREMIUM", enabled_routes, limit=15)
-            merged = sorted(
-                [dict(r, cabin_class="BUSINESS") for r in biz_deals] + [dict(r, cabin_class="PREMIUM") for r in prem_deals],
-                key=lambda x: (x["miles"] or 999999, x["depart_date"]),
-            )
-            summary_data["top_deals"] = merged[:10]
-            summary_data["coverage"] = {"total_days": stats["total_days"], "min_miles": stats["global_min_miles"]}
-            daily_deals = get_top_deals_for_year(conn, cabin_param, enabled_routes, days=365)
-            top_deals_calendar = build_partner_top_deals_calendar(daily_deals, days=365)
-            for orig, dest in enabled_routes[:5]:
-                runs = get_scan_runs_for_month(conn, orig, dest, cabin_param, month_param)
-                if len(runs) >= 2:
-                    lm = get_month_fares_by_scan_run(conn, runs[0]["scan_run_id"], orig, dest, cabin_param, month_param)
-                    pm = get_month_fares_by_scan_run(conn, runs[1]["scan_run_id"], orig, dest, cabin_param, month_param)
-                    delta = compute_month_delta(lm, pm)
-                    drops = delta.get("biggest_drops", [])[:2]
-                    if drops:
-                        summary_data["delta_routes"].append({"origin": orig, "destination": dest, "drops": drops})
-
-        discovery_months_present = months_present(conn, cabin_param, discovery_origins)
-        if discovery_origins:
-            if discovery_months_mode == "all":
-                discovery_months_used = discovery_months_present
-            else:
-                n = int(discovery_months_mode) if discovery_months_mode.isdigit() else 6
-                discovery_months_used = discovery_months_present[: min(n, len(discovery_months_present))]
-            valid_origins = [o for o in discovery_origins if o in origins_available]
-            if valid_origins:
-                by_origin = discovery_multi_origin(
-                    conn, valid_origins, cabin_param, discovery_months_used, limit_per_origin=discovery_limit
-                )
-                route_discovery = [(orig, by_origin.get(orig, [])) for orig in valid_origins]
-
-        routes_for_heatmap = enabled_routes if heatmap_watchlist_only else (
-            [(r["origin"], r["destination"]) for r in watch_routes]
-        )
-        if month_param and routes_for_heatmap:
-            heatmap = build_heatmap(
-                conn, month_param, cabin_param, routes_for_heatmap, max_routes=heatmap_max
-            )
-        conn.close()
-
-    if not month_param:
-        month_param = datetime.now().strftime("%Y-%m")
-
-    now = datetime.now()
-    months_all = []
-    y, m = now.year, now.month
-    for _ in range(12):
-        months_all.append(f"{y:04d}-{m:02d}")
-        m += 1
-        if m > 12:
-            m, y = 1, y + 1
-
-    data_freshness = _flyingblue_data_freshness(db_path, enabled_routes if os.path.exists(db_path) else [], month_param)
-
-    def _report_url(override_tab=None):
-        from urllib.parse import urlencode
-        p = {"month": month_param, "cabin": cabin_param, "tab": override_tab or tab_param}
-        for o in discovery_origins:
-            p.setdefault("discovery_origin", []).append(o)
-        p["discovery_months"] = discovery_months_mode
-        p["discovery_limit"] = discovery_limit
-        p["heatmap_watchlist"] = "1" if heatmap_watchlist_only else "0"
-        p["heatmap_max"] = heatmap_max
-        return "/partner-awards/flyingblue/reports?" + urlencode(p, doseq=True)
-
-    return render_template(
-        "partner_awards_flyingblue_reports.html",
-        tab=tab_param,
-        watch_routes=watch_routes,
-        top_deals=top_deals,
-        top_deals_calendar=top_deals_calendar,
-        stats=stats,
-        summary_data=summary_data,
-        month=month_param,
-        cabin=cabin_param,
-        months_all=months_all,
-        route_discovery=route_discovery,
-        discovery_origins=discovery_origins,
-        discovery_months_mode=discovery_months_mode,
-        discovery_limit=discovery_limit,
-        discovery_months_used=discovery_months_used,
-        origins_available=origins_available,
-        heatmap=heatmap,
-        heatmap_watchlist_only=heatmap_watchlist_only,
-        heatmap_max=heatmap_max,
-        data_freshness=data_freshness,
-        report_url=_report_url,
-    )
 
 
 @app.route("/partner-awards/self-test")
@@ -855,11 +865,16 @@ def _extract_cookie_string_from_paste(paste: str) -> str | None:
 @app.route("/partner-awards/flyingblue/cookies", methods=["POST"])
 def partner_awards_flyingblue_cookies():
     """Save Flying Blue cookie string to runner config. Form: cookie_string (or empty to clear).
-    Accepts: plain cookies, full cURL (Copy as cURL), or Cookie-Editor JSON."""
+    Accepts: plain cookies, full cURL (Copy as cURL), or Cookie-Editor JSON.
+    Returns JSON when X-Requested-With: XMLHttpRequest (for fetch, no reload)."""
     config_path = _get_runner_config_path()
     raw = (request.form.get("cookie_string") or "").strip()
     cookie_string = _extract_cookie_string_from_paste(raw) if raw else ""
+    is_xhr = request.headers.get("X-Requested-With") == "XMLHttpRequest"
+
     if raw and not cookie_string:
+        if is_xhr:
+            return jsonify({"ok": False, "message": "Could not extract cookies. Paste the full cURL (Copy as cURL) or a cookie string."})
         flash("Could not extract cookies. Paste the full cURL (Copy as cURL) or a cookie string.", "error")
         return redirect(request.referrer or "/partner-awards/flyingblue")
     try:
@@ -881,17 +896,24 @@ def partner_awards_flyingblue_cookies():
             config.pop("cookie_prefer_host", None)
         with open(config_path, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=2)
-        flash("Flying Blue cookies saved." if cookie_string else "Flying Blue cookies cleared.", "success")
+        msg = "Flying Blue cookies saved." if cookie_string else "Flying Blue cookies cleared."
+        if is_xhr:
+            return jsonify({"ok": True, "message": msg, "has_cookies": bool(cookie_string)})
+        flash(msg, "success")
     except OSError as e:
+        if is_xhr:
+            return jsonify({"ok": False, "message": str(e)})
         flash(f"Could not save config: {e}", "error")
     except json.JSONDecodeError as e:
+        if is_xhr:
+            return jsonify({"ok": False, "message": str(e)})
         flash(f"Invalid config: {e}", "error")
     return redirect(request.referrer or "/partner-awards/flyingblue")
 
 
 @app.route("/partner-awards/flyingblue/cookies/test", methods=["POST"])
 def partner_awards_flyingblue_cookies_test():
-    """Run a quick AMS-CPT scan to test if cookies work. Returns JSON {ok, message, connections_count}."""
+    """Run a quick AMS-CPT scan to test if cookies work. Returns JSON {ok, message, connections_count, debug}."""
     import subprocess
     from pathlib import Path
     runner_dir = Path(__file__).resolve().parent / "partner_awards_remote_runner"
@@ -909,6 +931,7 @@ def partner_awards_flyingblue_cookies_test():
         )
         out_path = runner_dir / "outputs" / "AF" / "AMS-CPT" / "2026-03"
         connections = 0
+        debug_lines = []
         if out_path.exists():
             files = sorted(out_path.glob("lowest_fares_*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
             for f in files[:1]:
@@ -919,15 +942,39 @@ def partner_awards_flyingblue_cookies_test():
                     offers = inner.get("lowestFareOffers") or {}
                     conns = offers.get("connections") or {}
                     lowest = offers.get("lowestOffers") or []
-                    connections = len(conns) if isinstance(conns, dict) else (len(lowest) if isinstance(lowest, list) else 0)
-                except Exception:
-                    pass
+                    connections = (
+                        len(conns) if isinstance(conns, dict) and conns else 0
+                    ) or (len(lowest) if isinstance(lowest, list) else 0)
+                    if connections == 0 and body:
+                        errors = body.get("errors") or []
+                        if errors:
+                            debug_lines.append("API errors: " + str(errors)[:300])
+                        else:
+                            debug_lines.append("Response has no connections/lowestOffers")
+                except Exception as ex:
+                    debug_lines.append(f"Parse error: {ex}")
                 break
+        else:
+            debug_lines.append("No output file written")
+        if result.returncode != 0:
+            err = (result.stderr or result.stdout or f"exit {result.returncode}").strip()
+            debug_lines.append(err[:500] if err else f"Runner exit code {result.returncode}")
+        elif result.stderr and not debug_lines:
+            debug_lines.append(result.stderr.strip()[:300])
+
         ok = connections > 0
+        debug_str = "; ".join(debug_lines) if debug_lines else None
+        if ok:
+            msg = f"Got {connections} days of data"
+        elif debug_str:
+            msg = f"No data. {debug_str}"
+        else:
+            msg = "No data. Cookies may have expired or the API returned empty."
         return jsonify({
             "ok": ok,
-            "message": f"Got {connections} days of data" if ok else "No data (cookies may have expired)",
+            "message": msg,
             "connections_count": connections,
+            "debug": debug_str,
         })
     except subprocess.TimeoutExpired:
         return jsonify({"ok": False, "message": "Test timed out (60s)"})
@@ -950,9 +997,21 @@ def partner_awards_flyingblue_clear_block():
 @app.route("/partner-awards/flyingblue/run-batch", methods=["POST"])
 def partner_awards_flyingblue_run_batch():
     """Create queued open_dates_batch job for enabled watchlist routes. Redirect back."""
-    force_refresh = request.form.get("force_refresh") in ("1", "true", "on", "yes")
     db_path = _get_partner_db_path()
     from partner_awards.airfrance.adapter import init_db
+    from partner_awards.airfrance.watchlist import list_watch_routes
+
+    conn = sqlite3.connect(db_path)
+    init_db(conn)
+    watch_routes = list_watch_routes(conn, "flyingblue")
+    enabled_count = sum(1 for r in watch_routes if r["enabled"])
+    conn.close()
+
+    if enabled_count == 0:
+        flash("Enable at least one route in the watchlist to run a scan.", "error")
+        return redirect(request.referrer or "/partner-awards/flyingblue")
+
+    force_refresh = request.form.get("force_refresh") in ("1", "true", "on", "yes")
     conn = sqlite3.connect(db_path)
     init_db(conn)
     params = {"months": 12, "cabins": ["BUSINESS", "PREMIUM"], "force_refresh": force_refresh}
@@ -964,6 +1023,12 @@ def partner_awards_flyingblue_run_batch():
     )
     conn.commit()
     conn.close()
+
+    flash(
+        f"Job queued ({enabled_count} routes). Run the worker in a terminal: "
+        "python -m partner_awards.jobs_worker",
+        "success",
+    )
     return redirect(request.referrer or "/partner-awards/flyingblue")
 
 
@@ -971,6 +1036,47 @@ def partner_awards_flyingblue_run_batch():
 def partner_awards_flyingblue_ingest():
     """Flying Blue import & test ingest (legacy AF/KLM page)."""
     return render_template("partner_awards.html")
+
+
+@app.route("/partner-awards/watchlist/seed-recommended", methods=["POST"])
+def partner_awards_watchlist_seed_recommended():
+    """Add recommended routes to watchlist. Adds missing; keeps existing. Redirect back."""
+    import json
+    rec_path = Path(__file__).resolve().parent / "partner_awards_remote_runner" / "recommended_routes.json"
+    if not rec_path.exists():
+        flash("recommended_routes.json not found", "error")
+        return redirect(request.referrer or "/partner-awards/flyingblue")
+    try:
+        with open(rec_path, encoding="utf-8") as f:
+            data = json.load(f)
+        routes = data.get("routes") or []
+    except Exception as e:
+        flash(f"Invalid recommended_routes.json: {e}", "error")
+        return redirect(request.referrer or "/partner-awards/flyingblue")
+    db_path = _get_partner_db_path()
+    from partner_awards.airfrance.adapter import init_db
+    from partner_awards.airfrance.watchlist import upsert_watch_route, list_watch_routes
+    conn = sqlite3.connect(db_path)
+    init_db(conn)
+    existing = {(r["origin"], r["destination"]) for r in list_watch_routes(conn, "flyingblue")}
+    added = 0
+    for item in routes:
+        if not isinstance(item, dict):
+            continue
+        o, d = item.get("origin"), item.get("destination")
+        if not o or not d or (o, d) in existing:
+            if o and d:
+                existing.add((o, d))
+            continue
+        try:
+            upsert_watch_route(conn, "flyingblue", o, d, enabled=1)
+            added += 1
+            existing.add((o, d))
+        except ValueError:
+            pass
+    conn.close()
+    flash(f"Added {added} routes from recommended list. Total watchlist: {len(existing)}.", "success" if added else None)
+    return redirect(request.referrer or "/partner-awards/flyingblue")
 
 
 @app.route("/partner-awards/watchlist/add", methods=["POST"])
