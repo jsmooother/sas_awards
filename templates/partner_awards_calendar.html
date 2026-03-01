@@ -14,8 +14,11 @@
 
 {% if blocked_until %}
 <div class="card" style="margin-bottom:1rem;border-color:var(--color-warning,orange);">
-  <div class="card-inner">
-    <strong>Fetching paused</strong> until {{ blocked_until }} due to blocking. The runner will not scan until then.
+  <div class="card-inner" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;">
+    <span><strong>Fetching paused</strong> until {{ blocked_until }} due to blocking. The runner will not scan until then.</span>
+    <form method="post" action="/partner-awards/flyingblue/clear-block" style="margin:0;">
+      <button type="submit" class="btn">Clear block & resume</button>
+    </form>
   </div>
 </div>
 {% endif %}

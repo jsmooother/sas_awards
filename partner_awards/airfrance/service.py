@@ -731,6 +731,12 @@ def _parse_lowest_fare_dates(body: Dict[str, Any], cabins: List[str], max_days: 
                     miles = conn.get("miles") or (conn.get("price") or {}).get("amount") if isinstance(conn.get("price"), dict) else None
                     if dt and miles is not None:
                         candidates.append((str(dt)[:10], int(miles)))
+        for item in (node.get("lowestOffers") or []):
+            if isinstance(item, dict):
+                dt = item.get("flightDate")
+                miles = item.get("displayPrice") or item.get("totalPrice") or (item.get("price") or {}).get("amount") if isinstance(item.get("price"), dict) else None
+                if dt and miles is not None:
+                    candidates.append((str(dt)[:10], int(miles)))
 
     if not candidates:
         return []

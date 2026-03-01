@@ -80,8 +80,11 @@ def set_blocked(minutes: int = 30, reason: str = "", host: str = "") -> None:
 
 
 def clear_blocked() -> None:
-    """Reset consecutive blocked count (call after successful run)."""
+    """Clear block so scans can resume. Removes afkl_blocked_until and resets consecutive count."""
     state = read_state()
-    if "afkl_consecutive_blocked" in state:
-        state["afkl_consecutive_blocked"] = 0
-        write_state(**state)
+    state.pop("afkl_blocked_until", None)
+    state["afkl_consecutive_blocked"] = 0
+    state["updated_at"] = datetime.utcnow().isoformat() + "Z"
+    _ensure_dir()
+    with open(STATE_PATH, "w", encoding="utf-8") as f:
+        json.dump(state, f, indent=2)

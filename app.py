@@ -5,6 +5,7 @@ Access from LAN: http://<macmini-ip>:5000
 """
 import json
 import os
+import sys
 import datetime as _dt
 import requests
 from flask import Flask, render_template, request, jsonify, redirect, flash
@@ -136,6 +137,35 @@ def build_year_calendar_data(daily_counts, days=365):
     return [months[k] for k in sorted(months.keys())]
 
 
+def build_partner_top_deals_calendar(daily_deals, days=365):
+    """Build month/day buckets for Partner top deals: each day has miles, route, is_min."""
+    start = _dt.date.today()
+    miles_list = [d["miles"] for d in daily_deals.values() if d.get("miles") is not None]
+    global_min = min(miles_list, default=None)
+    months = {}
+    for i in range(days):
+        d = start + _dt.timedelta(days=i)
+        iso = d.isoformat()
+        deal = daily_deals.get(iso, {})
+        miles = deal.get("miles")
+        has_data = miles is not None
+        is_min = has_data and global_min is not None and miles == global_min
+        key = d.strftime("%Y-%m")
+        if key not in months:
+            months[key] = {"label": d.strftime("%b %Y"), "days": []}
+        months[key]["days"].append({
+            "iso": iso,
+            "day": d.strftime("%d"),
+            "miles": miles,
+            "origin": deal.get("origin", ""),
+            "destination": deal.get("destination", ""),
+            "has_data": has_data,
+            "is_today": i == 0,
+            "is_min": is_min,
+        })
+    return [months[k] for k in sorted(months.keys())]
+
+
 def build_dual_year_calendar_data(outbound_counts, inbound_counts, days=365, min_flights=1):
     """Build month/day buckets with separate outbound and inbound counts."""
     start = _dt.date.today()
@@ -253,14 +283,58 @@ def partner_awards():
 
 @app.route("/partner-awards/sas")
 def partner_awards_sas():
-    """SAS wrapper: links to existing SAS scanner."""
-    return render_template("partner_awards_sas.html")
+    """Redirect: SAS EuroBonus views/reports are in main nav."""
+    return redirect("/")
 
 
 @app.route("/partner-awards/virgin")
 def partner_awards_virgin():
-    """Virgin Atlantic placeholder."""
-    return render_template("partner_awards_virgin.html")
+    """Virgin Atlantic dashboard: workflow shell (coming soon)."""
+    watch_routes = []
+    db_path = _get_partner_db_path()
+    if os.path.exists(db_path):
+        from partner_awards.airfrance.adapter import init_db
+        conn = sqlite3.connect(db_path)
+        init_db(conn)
+        conn.row_factory = sqlite3.Row
+        from partner_awards.airfrance.watchlist import list_watch_routes
+        watch_routes = list_watch_routes(conn, "virgin")
+        conn.close()
+    return render_template("partner_awards_virgin.html", watch_routes=watch_routes)
+
+
+@_partner_awards_error_handler
+@app.route("/partner-awards/virgin/reports", methods=["GET"])
+def partner_awards_virgin_reports():
+    """Virgin Atlantic reports: placeholder tabs (Coming soon)."""
+    tab_param = request.args.get("tab", "summary")
+    if tab_param not in ("summary", "year-view", "discovery", "heatmap"):
+        tab_param = "summary"
+    month_param = request.args.get("month") or __import__("datetime").datetime.now().strftime("%Y-%m")
+    cabin_param = request.args.get("cabin", "BUSINESS")
+
+    def _report_url(override_tab=None):
+        from urllib.parse import urlencode
+        p = {"month": month_param, "cabin": cabin_param, "tab": override_tab or tab_param}
+        return "/partner-awards/virgin/reports?" + urlencode(p)
+
+    now = __import__("datetime").datetime.now()
+    months_all = []
+    y, m = now.year, now.month
+    for _ in range(12):
+        months_all.append(f"{y:04d}-{m:02d}")
+        m += 1
+        if m > 12:
+            m, y = 1, y + 1
+
+    return render_template(
+        "partner_awards_virgin_reports.html",
+        tab=tab_param,
+        month=month_param,
+        cabin=cabin_param,
+        months_all=months_all,
+        report_url=_report_url,
+    )
 
 
 def _get_partner_db_path():
@@ -272,16 +346,20 @@ def _get_partner_db_path():
     return path
 
 
+def _get_runner_config_path():
+    """Path to partner_awards_remote_runner/config.json."""
+    from pathlib import Path
+    return Path(__file__).resolve().parent / "partner_awards_remote_runner" / "config.json"
+
+
 @_partner_awards_error_handler
 @app.route("/partner-awards/flyingblue", methods=["GET"])
 def partner_awards_flyingblue():
-    """Flying Blue dashboard: watchlist, top deals, route discovery, heatmap, month/cabin controls."""
+    """Flying Blue dashboard: 4-step workflow (Configure → Run → Review → Act)."""
     import sqlite3
     from datetime import datetime
     from partner_awards.airfrance.watchlist import list_watch_routes
     from partner_awards.airfrance.top_deals import get_top_deals_for_month
-    from partner_awards.airfrance.route_discovery import months_present, discovery_multi_origin
-    from partner_awards.airfrance.heatmap import build_heatmap
 
     db_path = _get_partner_db_path()
     month_param = request.args.get("month")
@@ -293,21 +371,12 @@ def partner_awards_flyingblue():
     if cabin_param not in ("BUSINESS", "PREMIUM"):
         cabin_param = "BUSINESS"
         validation_warning = "Invalid cabin; using BUSINESS."
-    discovery_origins = request.args.getlist("discovery_origin") or ["AMS", "PAR"]
-    discovery_months_mode = request.args.get("discovery_months", "6")  # 1, 3, 6, 12, all
-    discovery_limit = int(request.args.get("discovery_limit", 20))
-    heatmap_watchlist_only = request.args.get("heatmap_watchlist", "1") in ("1", "true", "on", "yes")
-    heatmap_max = int(request.args.get("heatmap_max", 25))
 
     watch_routes = []
+    enabled_routes = []
     top_deals = []
     stats = {"global_min_miles": None, "days_at_min": 0, "total_days": 0}
     months_available = []
-    route_discovery = []
-    discovery_months_present = []
-    discovery_months_used = []
-    origins_available = []
-    heatmap = {"days": [], "rows": [], "month": "", "cabin_class": ""}
     latest_job = None
 
     if os.path.exists(db_path):
@@ -336,34 +405,7 @@ def partner_awards_flyingblue():
 
         if enabled_routes:
             top_deals, stats = get_top_deals_for_month(
-                conn, month_param, cabin_param, enabled_routes, limit=50
-            )
-
-        discovery_months_present = months_present(conn, cabin_param, discovery_origins)
-        origins_cur = conn.execute(
-            "SELECT DISTINCT origin FROM partner_award_calendar_fares WHERE source='AF' ORDER BY origin"
-        )
-        origins_available = [r[0] for r in origins_cur.fetchall() if r[0]]
-
-        if discovery_origins:
-            if discovery_months_mode == "all":
-                discovery_months_used = discovery_months_present
-            else:
-                n = int(discovery_months_mode) if discovery_months_mode.isdigit() else 6
-                discovery_months_used = discovery_months_present[: min(n, len(discovery_months_present))]
-            valid_origins = [o for o in discovery_origins if o in origins_available]
-            if valid_origins:
-                by_origin = discovery_multi_origin(
-                    conn, valid_origins, cabin_param, discovery_months_used, limit_per_origin=discovery_limit
-                )
-                route_discovery = [(orig, by_origin.get(orig, [])) for orig in valid_origins]
-
-        routes_for_heatmap = enabled_routes if heatmap_watchlist_only else (
-            [(r["origin"], r["destination"]) for r in watch_routes]
-        )
-        if month_param and routes_for_heatmap:
-            heatmap = build_heatmap(
-                conn, month_param, cabin_param, routes_for_heatmap, max_routes=heatmap_max
+                conn, month_param, cabin_param, enabled_routes, limit=5
             )
 
         cur = conn.execute(
@@ -385,6 +427,27 @@ def partner_awards_flyingblue():
     if not month_param:
         month_param = datetime.now().strftime("%Y-%m")
 
+    has_cookies = False
+    config_path = _get_runner_config_path()
+    if config_path.exists():
+        try:
+            with open(config_path, encoding="utf-8") as f:
+                cfg = json.load(f)
+            has_cookies = bool(cfg.get("cookie_string") or os.environ.get("AF_COOKIE_STRING"))
+        except Exception:
+            pass
+
+    # Full list of next 12 months for dropdown
+    now = datetime.now()
+    months_all = []
+    y, m = now.year, now.month
+    for _ in range(12):
+        months_all.append(f"{y:04d}-{m:02d}")
+        m += 1
+        if m > 12:
+            m = 1
+            y += 1
+
     return render_template(
         "partner_awards_flyingblue.html",
         watch_routes=watch_routes,
@@ -392,19 +455,231 @@ def partner_awards_flyingblue():
         stats=stats,
         month=month_param,
         cabin=cabin_param,
-        months_available=months_available,
+        months_all=months_all,
+        latest_job=latest_job,
+        validation_warning=validation_warning,
+        has_cookies=has_cookies,
+        data_freshness=_flyingblue_data_freshness(db_path, enabled_routes if os.path.exists(db_path) else [], month_param),
+    )
+
+
+def _flyingblue_data_freshness(db_path, enabled_routes, month_param):
+    """Return dict: last_scan_at, last_scan_host, routes_24h, total_routes, month_days_captured, month_days_total."""
+    import calendar
+    out = {"last_scan_at": None, "last_scan_host": None, "routes_24h": 0, "total_routes": len(enabled_routes), "month_days_captured": 0, "month_days_total": 31}
+    if not os.path.exists(db_path) or not month_param:
+        return out
+    try:
+        conn = sqlite3.connect(db_path)
+        cur = conn.execute(
+            """SELECT COUNT(DISTINCT origin || '-' || destination || '-' || month || '-' || cabin)
+               FROM partner_award_job_tasks t
+               INNER JOIN partner_award_jobs j ON j.id = t.job_id AND j.program = 'flyingblue'
+               WHERE t.status='done' AND t.finished_at > datetime('now', '-24 hours')"""
+        )
+        out["routes_24h"] = cur.fetchone()[0] or 0
+        cur = conn.execute(
+            """SELECT t.finished_at FROM partner_award_job_tasks t
+               INNER JOIN partner_award_jobs j ON j.id = t.job_id AND j.program = 'flyingblue'
+               WHERE t.status='done' ORDER BY t.finished_at DESC LIMIT 1"""
+        )
+        row = cur.fetchone()
+        if row:
+            out["last_scan_at"] = row[0]
+        cur = conn.execute(
+            """SELECT host_used FROM partner_award_calendar_fares
+               WHERE source='AF' AND substr(depart_date,1,7)=?
+               ORDER BY updated_at DESC LIMIT 1""",
+            (month_param,),
+        )
+        host_row = cur.fetchone()
+        if host_row and host_row[0]:
+            out["last_scan_host"] = host_row[0]
+        try:
+            y, m = int(month_param[:4]), int(month_param[5:7])
+            out["month_days_total"] = calendar.monthrange(y, m)[1]
+        except (ValueError, IndexError):
+            pass
+        if enabled_routes:
+            route_conds = " OR ".join("(origin=? AND destination=?)" for _ in enabled_routes)
+            route_params = [p for pair in enabled_routes for p in pair]
+            cur = conn.execute(
+                f"""SELECT COUNT(DISTINCT depart_date) FROM partner_award_calendar_fares
+                    WHERE source='AF' AND cabin_class IN ('BUSINESS','PREMIUM') AND substr(depart_date,1,7)=?
+                    AND ({route_conds})""",
+                [month_param] + route_params,
+            )
+            out["month_days_captured"] = cur.fetchone()[0] or 0
+        conn.close()
+    except Exception:
+        pass
+    return out
+
+
+@_partner_awards_error_handler
+@app.route("/partner-awards/flyingblue/reports", methods=["GET"])
+def partner_awards_flyingblue_reports():
+    """Flying Blue reports: Summary (default), Year view, Discovery, Heatmap."""
+    import sqlite3
+    from datetime import datetime
+    from partner_awards.airfrance.watchlist import list_watch_routes
+    from partner_awards.airfrance.top_deals import get_top_deals_for_month, get_top_deals_for_year
+    from partner_awards.airfrance.route_discovery import months_present, discovery_multi_origin
+    from partner_awards.airfrance.heatmap import build_heatmap
+    from partner_awards.airfrance.calendar_delta import (
+        get_scan_runs_for_month,
+        get_month_fares_by_scan_run,
+        compute_month_delta,
+        build_telegram_month_text,
+    )
+
+    db_path = _get_partner_db_path()
+    month_param = request.args.get("month")
+    cabin_param = request.args.get("cabin", "BUSINESS")
+    tab_param = request.args.get("tab", "summary")
+    if tab_param not in ("summary", "year-view", "discovery", "heatmap"):
+        tab_param = "summary"
+    discovery_origins = request.args.getlist("discovery_origin") or ["AMS", "PAR"]
+    discovery_months_mode = request.args.get("discovery_months", "6")
+    discovery_limit = int(request.args.get("discovery_limit", 20))
+    heatmap_watchlist_only = request.args.get("heatmap_watchlist", "1") in ("1", "true", "on", "yes")
+    heatmap_max = int(request.args.get("heatmap_max", 25))
+
+    if month_param and (len(month_param) != 7 or not (month_param[:4].isdigit() and month_param[5:7].isdigit() and month_param[4] == "-")):
+        month_param = None
+    if cabin_param not in ("BUSINESS", "PREMIUM"):
+        cabin_param = "BUSINESS"
+
+    watch_routes = []
+    enabled_routes = []
+    top_deals = []
+    top_deals_calendar = []
+    stats = {"global_min_miles": None, "days_at_min": 0, "total_days": 0}
+    route_discovery = []
+    discovery_months_present = []
+    discovery_months_used = []
+    origins_available = ["AMS", "PAR"]
+    heatmap = {"days": [], "rows": [], "month": "", "cabin_class": ""}
+    summary_data = {"top_deals": [], "biggest_drops": [], "coverage": {}, "delta_routes": []}
+
+    if os.path.exists(db_path):
+        from partner_awards.airfrance.adapter import init_db
+        conn = sqlite3.connect(db_path)
+        init_db(conn)
+        conn.row_factory = sqlite3.Row
+        watch_routes = list_watch_routes(conn, "flyingblue")
+        enabled_routes = [(r["origin"], r["destination"]) for r in watch_routes if r["enabled"]]
+
+        if enabled_routes:
+            route_conds = " OR ".join("(origin=? AND destination=?)" for _ in enabled_routes)
+            route_params = [p for pair in enabled_routes for p in pair]
+            months_cur = conn.execute(
+                f"""SELECT DISTINCT substr(depart_date, 1, 7) as ym
+                   FROM partner_award_calendar_fares WHERE source='AF' AND ({route_conds})
+                   ORDER BY ym DESC LIMIT 24""",
+                route_params,
+            )
+            months_available = [r[0] for r in months_cur.fetchall() if r[0]]
+        else:
+            months_available = []
+
+        if not month_param:
+            month_param = months_available[0] if months_available else datetime.now().strftime("%Y-%m")
+
+        if enabled_routes:
+            top_deals, stats = get_top_deals_for_month(
+                conn, month_param, cabin_param, enabled_routes, limit=20
+            )
+            biz_deals, _ = get_top_deals_for_month(conn, month_param, "BUSINESS", enabled_routes, limit=15)
+            prem_deals, _ = get_top_deals_for_month(conn, month_param, "PREMIUM", enabled_routes, limit=15)
+            merged = sorted(
+                [dict(r, cabin_class="BUSINESS") for r in biz_deals] + [dict(r, cabin_class="PREMIUM") for r in prem_deals],
+                key=lambda x: (x["miles"] or 999999, x["depart_date"]),
+            )
+            summary_data["top_deals"] = merged[:10]
+            summary_data["coverage"] = {"total_days": stats["total_days"], "min_miles": stats["global_min_miles"]}
+            daily_deals = get_top_deals_for_year(conn, cabin_param, enabled_routes, days=365)
+            top_deals_calendar = build_partner_top_deals_calendar(daily_deals, days=365)
+            for orig, dest in enabled_routes[:5]:
+                runs = get_scan_runs_for_month(conn, orig, dest, cabin_param, month_param)
+                if len(runs) >= 2:
+                    lm = get_month_fares_by_scan_run(conn, runs[0]["scan_run_id"], orig, dest, cabin_param, month_param)
+                    pm = get_month_fares_by_scan_run(conn, runs[1]["scan_run_id"], orig, dest, cabin_param, month_param)
+                    delta = compute_month_delta(lm, pm)
+                    drops = delta.get("biggest_drops", [])[:2]
+                    if drops:
+                        summary_data["delta_routes"].append({"origin": orig, "destination": dest, "drops": drops})
+
+        discovery_months_present = months_present(conn, cabin_param, discovery_origins)
+        if discovery_origins:
+            if discovery_months_mode == "all":
+                discovery_months_used = discovery_months_present
+            else:
+                n = int(discovery_months_mode) if discovery_months_mode.isdigit() else 6
+                discovery_months_used = discovery_months_present[: min(n, len(discovery_months_present))]
+            valid_origins = [o for o in discovery_origins if o in origins_available]
+            if valid_origins:
+                by_origin = discovery_multi_origin(
+                    conn, valid_origins, cabin_param, discovery_months_used, limit_per_origin=discovery_limit
+                )
+                route_discovery = [(orig, by_origin.get(orig, [])) for orig in valid_origins]
+
+        routes_for_heatmap = enabled_routes if heatmap_watchlist_only else (
+            [(r["origin"], r["destination"]) for r in watch_routes]
+        )
+        if month_param and routes_for_heatmap:
+            heatmap = build_heatmap(
+                conn, month_param, cabin_param, routes_for_heatmap, max_routes=heatmap_max
+            )
+        conn.close()
+
+    if not month_param:
+        month_param = datetime.now().strftime("%Y-%m")
+
+    now = datetime.now()
+    months_all = []
+    y, m = now.year, now.month
+    for _ in range(12):
+        months_all.append(f"{y:04d}-{m:02d}")
+        m += 1
+        if m > 12:
+            m, y = 1, y + 1
+
+    data_freshness = _flyingblue_data_freshness(db_path, enabled_routes if os.path.exists(db_path) else [], month_param)
+
+    def _report_url(override_tab=None):
+        from urllib.parse import urlencode
+        p = {"month": month_param, "cabin": cabin_param, "tab": override_tab or tab_param}
+        for o in discovery_origins:
+            p.setdefault("discovery_origin", []).append(o)
+        p["discovery_months"] = discovery_months_mode
+        p["discovery_limit"] = discovery_limit
+        p["heatmap_watchlist"] = "1" if heatmap_watchlist_only else "0"
+        p["heatmap_max"] = heatmap_max
+        return "/partner-awards/flyingblue/reports?" + urlencode(p, doseq=True)
+
+    return render_template(
+        "partner_awards_flyingblue_reports.html",
+        tab=tab_param,
+        watch_routes=watch_routes,
+        top_deals=top_deals,
+        top_deals_calendar=top_deals_calendar,
+        stats=stats,
+        summary_data=summary_data,
+        month=month_param,
+        cabin=cabin_param,
+        months_all=months_all,
         route_discovery=route_discovery,
         discovery_origins=discovery_origins,
         discovery_months_mode=discovery_months_mode,
         discovery_limit=discovery_limit,
-        discovery_months_present=discovery_months_present,
         discovery_months_used=discovery_months_used,
         origins_available=origins_available,
         heatmap=heatmap,
         heatmap_watchlist_only=heatmap_watchlist_only,
         heatmap_max=heatmap_max,
-        latest_job=latest_job,
-        validation_warning=validation_warning,
+        data_freshness=data_freshness,
+        report_url=_report_url,
     )
 
 
@@ -458,14 +733,17 @@ def partner_awards_self_test():
     try:
         conn = sqlite3.connect(db_path)
         cur = conn.execute(
-            "SELECT origin, destination, substr(depart_date,1,7) as ym, cabin_class FROM partner_award_calendar_fares WHERE source='AF' LIMIT 1"
+            "SELECT origin, destination, substr(depart_date,1,7) as ym, cabin_class, COUNT(*) FROM partner_award_calendar_fares WHERE source='AF' GROUP BY origin, destination, substr(depart_date,1,7), cabin_class ORDER BY origin, destination, ym LIMIT 20"
         )
-        row = cur.fetchone()
+        rows = cur.fetchall()
         conn.close()
-        if row:
-            checks.append({"name": "Calendar fares", "status": "PASS", "msg": f"{row[0]}→{row[1]} {row[2]} {row[3]}"})
+        if rows:
+            summary = "; ".join(f"{r[0]}→{r[1]} {r[2]} {r[4]}d" for r in rows[:5])
+            if len(rows) > 5:
+                summary += f" … (+{len(rows)-5})"
+            checks.append({"name": "Calendar fares", "status": "PASS", "msg": summary})
         else:
-            checks.append({"name": "Calendar fares", "status": "SKIP", "msg": "No rows"})
+            checks.append({"name": "Calendar fares", "status": "SKIP", "msg": "No rows. Run batch scan + import."})
     except Exception as e:
         checks.append({"name": "Calendar fares", "status": "FAIL", "msg": str(e)[:200]})
 
@@ -539,15 +817,146 @@ def partner_awards_self_test():
     return render_template("partner_awards_self_test.html", checks=checks, diag_json=json.dumps(diag, indent=2))
 
 
+def _extract_cookie_string_from_paste(paste: str) -> str | None:
+    """Extract cookie string from pasted full cURL, Cookie-Editor JSON, or return None if already plain cookies."""
+    import re
+    paste = paste.strip()
+    if not paste:
+        return None
+    # Full cURL: -b '...' or -b "..." — use [^']* for single-quoted (cookie can contain " from %22)
+    for pattern in [
+        r"-b\s+'([^']*)'",
+        r'-b\s+"((?:[^"\\]|\\.)*)"',
+        r"--cookie\s+'([^']*)'",
+        r'--cookie\s+"((?:[^"\\]|\\.)*)"',
+        r"-H\s+['\"]Cookie:\s*([^'\"]+)['\"]",
+    ]:
+        m = re.search(pattern, paste, re.IGNORECASE | re.DOTALL)
+        if m and m.group(1).strip():
+            return m.group(1).strip()
+    # Cookie-Editor JSON: [{"name":"x","value":"y",...}, ...]
+    if paste.startswith("[") and '"name"' in paste and '"value"' in paste:
+        try:
+            arr = json.loads(paste)
+            parts = []
+            for c in arr if isinstance(arr, list) else []:
+                if isinstance(c, dict) and c.get("name") and c.get("value"):
+                    parts.append(f"{c['name']}={c['value']}")
+            if parts:
+                return "; ".join(parts)
+        except json.JSONDecodeError:
+            pass
+    # Assume plain cookie string (name=val; name=val)
+    if "=" in paste:
+        return paste
+    return None
+
+
+@app.route("/partner-awards/flyingblue/cookies", methods=["POST"])
+def partner_awards_flyingblue_cookies():
+    """Save Flying Blue cookie string to runner config. Form: cookie_string (or empty to clear).
+    Accepts: plain cookies, full cURL (Copy as cURL), or Cookie-Editor JSON."""
+    config_path = _get_runner_config_path()
+    raw = (request.form.get("cookie_string") or "").strip()
+    cookie_string = _extract_cookie_string_from_paste(raw) if raw else ""
+    if raw and not cookie_string:
+        flash("Could not extract cookies. Paste the full cURL (Copy as cURL) or a cookie string.", "error")
+        return redirect(request.referrer or "/partner-awards/flyingblue")
+    try:
+        config = {}
+        if config_path.exists():
+            with open(config_path, encoding="utf-8") as f:
+                config = json.load(f)
+        if cookie_string:
+            config["cookie_string"] = cookie_string
+            # Infer host from curl URL so runner uses matching domain (klm.se vs airfrance.us)
+            import re as _re
+            url_m = _re.search(r"curl\s+['\"]?(https?://[^'\s\"]+)['\"]?", raw)
+            if url_m:
+                from urllib.parse import urlparse
+                netloc = (urlparse(url_m.group(1)).netloc or "").lower()
+                config["cookie_prefer_host"] = "AF-US" if "airfrance" in netloc else "KLM-SE"
+        else:
+            config.pop("cookie_string", None)
+            config.pop("cookie_prefer_host", None)
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=2)
+        flash("Flying Blue cookies saved." if cookie_string else "Flying Blue cookies cleared.", "success")
+    except OSError as e:
+        flash(f"Could not save config: {e}", "error")
+    except json.JSONDecodeError as e:
+        flash(f"Invalid config: {e}", "error")
+    return redirect(request.referrer or "/partner-awards/flyingblue")
+
+
+@app.route("/partner-awards/flyingblue/cookies/test", methods=["POST"])
+def partner_awards_flyingblue_cookies_test():
+    """Run a quick AMS-CPT scan to test if cookies work. Returns JSON {ok, message, connections_count}."""
+    import subprocess
+    from pathlib import Path
+    runner_dir = Path(__file__).resolve().parent / "partner_awards_remote_runner"
+    if not (runner_dir / "runner.py").exists():
+        return jsonify({"ok": False, "message": "Runner not found"})
+    try:
+        result = subprocess.run(
+            [sys.executable, "runner.py", "open-dates-month", "--origin", "AMS", "--destination", "CPT",
+             "--month", "2026-03", "--cabins", "BUSINESS"],
+            cwd=str(runner_dir),
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parent)},
+        )
+        out_path = runner_dir / "outputs" / "AF" / "AMS-CPT" / "2026-03"
+        connections = 0
+        if out_path.exists():
+            files = sorted(out_path.glob("lowest_fares_*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+            for f in files[:1]:
+                try:
+                    data = json.load(open(f, encoding="utf-8"))
+                    body = data.get("body") or data
+                    inner = body.get("data") or {}
+                    offers = inner.get("lowestFareOffers") or {}
+                    conns = offers.get("connections") or {}
+                    lowest = offers.get("lowestOffers") or []
+                    connections = len(conns) if isinstance(conns, dict) else (len(lowest) if isinstance(lowest, list) else 0)
+                except Exception:
+                    pass
+                break
+        ok = connections > 0
+        return jsonify({
+            "ok": ok,
+            "message": f"Got {connections} days of data" if ok else "No data (cookies may have expired)",
+            "connections_count": connections,
+        })
+    except subprocess.TimeoutExpired:
+        return jsonify({"ok": False, "message": "Test timed out (60s)"})
+    except Exception as e:
+        return jsonify({"ok": False, "message": str(e)[:200]})
+
+
+@app.route("/partner-awards/flyingblue/clear-block", methods=["POST"])
+def partner_awards_flyingblue_clear_block():
+    """Clear AF/KLM cooldown block so scans can resume."""
+    try:
+        from partner_awards.airfrance.state import clear_blocked
+        clear_blocked()
+        flash("Block cleared. Scans can run again.")
+    except Exception as e:
+        flash(f"Failed to clear block: {e}", "error")
+    return redirect(request.referrer or "/partner-awards/flyingblue")
+
+
 @app.route("/partner-awards/flyingblue/run-batch", methods=["POST"])
 def partner_awards_flyingblue_run_batch():
     """Create queued open_dates_batch job for enabled watchlist routes. Redirect back."""
+    force_refresh = request.form.get("force_refresh") in ("1", "true", "on", "yes")
     db_path = _get_partner_db_path()
     from partner_awards.airfrance.adapter import init_db
     conn = sqlite3.connect(db_path)
     init_db(conn)
-    params = {"months": 12, "cabins": ["BUSINESS", "PREMIUM"]}
-    progress = {"total_tasks": 0, "done_tasks": 0, "current_task": None}
+    params = {"months": 12, "cabins": ["BUSINESS", "PREMIUM"], "force_refresh": force_refresh}
+    progress = {"total_tasks": 0, "done_tasks": 0, "skipped_tasks": 0, "current_task": None}
     conn.execute(
         """INSERT INTO partner_award_jobs (program, job_type, status, params_json, progress_json)
            VALUES ('flyingblue', 'open_dates_batch', 'queued', ?, ?)""",
@@ -582,6 +991,26 @@ def partner_awards_watchlist_add():
         flash(str(e), "error")
     finally:
         conn.close()
+
+    return redirect(request.referrer or "/partner-awards/flyingblue")
+
+
+@app.route("/partner-awards/watchlist/remove", methods=["POST"])
+def partner_awards_watchlist_remove():
+    """Remove route from watchlist. Form: id. Redirect back."""
+    route_id = request.form.get("id")
+    try:
+        route_id = int(route_id)
+    except (TypeError, ValueError):
+        return redirect(request.referrer or "/partner-awards/flyingblue")
+
+    db_path = _get_partner_db_path()
+    from partner_awards.airfrance.adapter import init_db
+    from partner_awards.airfrance.watchlist import delete_watch_route
+    conn = sqlite3.connect(db_path)
+    init_db(conn)
+    delete_watch_route(conn, route_id)
+    conn.close()
 
     return redirect(request.referrer or "/partner-awards/flyingblue")
 
@@ -669,67 +1098,8 @@ def partner_awards_job_detail(job_id):
 
 @app.route("/partner-awards/dashboard")
 def partner_awards_dashboard():
-    """Partner Awards dashboard: best offers by date."""
-    import sqlite3
-    import os
-    db_path = os.environ.get("PARTNER_AWARDS_DB_PATH") or os.path.join(
-        os.path.expanduser(os.environ.get("SAS_DB_PATH", "~/sas_awards")), "partner_awards.sqlite"
-    )
-    origin = request.args.get("origin", "PAR")
-    destination = request.args.get("destination", "JNB")
-
-    best = []
-    scan_runs = []
-    if os.path.exists(db_path):
-        from partner_awards.airfrance.adapter import init_db
-        conn = sqlite3.connect(db_path)
-        init_db(conn)  # ensures ingest_type column exists
-        conn.row_factory = sqlite3.Row
-        cur = conn.execute(
-            """SELECT depart_date, cabin_class, best_miles, best_tax, is_direct, duration_minutes, carrier
-               FROM partner_award_best_offers
-               WHERE source='AF' AND origin=? AND destination=?
-               ORDER BY depart_date, cabin_class""",
-            (origin, destination),
-        )
-        best = [dict(r) for r in cur.fetchall()]
-        # Recent scan runs with ingest_type for data source badge
-        try:
-            cur = conn.execute(
-                """SELECT id, ingest_type, depart_date, started_at, status
-                   FROM partner_award_scan_runs
-                   WHERE source='AF' AND origin=? AND destination=?
-                   ORDER BY id DESC LIMIT 10""",
-                (origin, destination),
-            )
-            scan_runs = [dict(r) for r in cur.fetchall()]
-        except sqlite3.OperationalError:
-            scan_runs = []  # ingest_type column may not exist in older DBs
-        conn.close()
-
-    # Unique ingest types from recent scans (for badge)
-    ingest_types = list(dict.fromkeys((r.get("ingest_type") or "fixture") for r in scan_runs))
-
-    # Pivot by date for table
-    by_date = {}
-    for r in best:
-        d = r["depart_date"]
-        if d not in by_date:
-            by_date[d] = {"date": d, "ECONOMY": None, "PREMIUM": None, "BUSINESS": None, "direct": False}
-        by_date[d][r["cabin_class"]] = {"miles": r["best_miles"], "tax": r["best_tax"], "is_direct": bool(r["is_direct"])}
-        if r["is_direct"]:
-            by_date[d]["direct"] = True
-
-    best_biz = min((r["best_miles"] for r in best if r["cabin_class"] == "BUSINESS" and r["best_miles"]), default=None)
-    rows = sorted(by_date.values(), key=lambda x: x["date"])
-    return render_template(
-        "partner_awards_dashboard.html",
-        rows=rows,
-        best_biz_miles=best_biz,
-        origin=origin,
-        destination=destination,
-        ingest_types=ingest_types,
-    )
+    """Removed: redirect to Partner overview."""
+    return redirect("/partner-awards")
 
 
 def _format_miles_k(miles: int | None) -> str:
@@ -1127,190 +1497,12 @@ def partner_awards_calendar_verify():
     return jsonify(result)
 
 
-@app.route("/business")
-def business():
-    args = request.args
-    min_seats = int(args.get("min_seats", MIN_SEATS))
-    origin = args.get("origin", "")
-    destination = args.get("destination", "").strip().upper()
-    city = args.get("city") or args.get("q", "").strip()
-    from_date = args.get("from_date", "")
-    to_date = args.get("to_date", "")
-
-    query = """
-        SELECT origin, city_name, airport_code, date, direction, ab
-        FROM flights
-        WHERE ab >= ? {{FILTERS}}
-        ORDER BY date, origin, city_name COLLATE NOCASE
-        LIMIT 500
-    """
-    params = [min_seats]
-    conditions = []
-    if origin:
-        conditions.append("origin = ?")
-        params.append(origin)
-    if destination:
-        conditions.append("airport_code = ?")
-        params.append(destination)
-    if city:
-        conditions.append("(city_name LIKE ? OR airport_code LIKE ?)")
-        params.append(f"%{city}%")
-        params.append(f"%{city}%")
-    if from_date:
-        conditions.append("date >= ?")
-        params.append(from_date)
-    if to_date:
-        conditions.append("date <= ?")
-        params.append(to_date)
-    if conditions:
-        query = query.replace("{{FILTERS}}", " AND " + " AND ".join(conditions))
-    else:
-        query = query.replace("{{FILTERS}}", "")
-
-    conn = get_conn()
-    cur = conn.execute(query, params)
-    rows = cur.fetchall()
-    conn.close()
-
-    return render_template(
-        "table.html",
-        title="Business (≥{m} seats)".format(m=min_seats),
-        rows=rows,
-        columns=["Origin", "City", "Code", "Date", "Direction", "Business"],
-        filters={
-            "origin": origin,
-            "destination": destination,
-            "city": city,
-            "from_date": from_date,
-            "to_date": to_date,
-            "min_seats": min_seats,
-        },
-        destination_options=get_destination_options(origin),
-    )
-
-
 @app.route("/all")
-def all_flights():
-    """European flights – all cabins (Economy, Plus, Business). Mostly Economy."""
-    args = request.args
-    min_seats = int(args.get("min_seats", MIN_SEATS))
-    origin = args.get("origin", "")
-    destination = args.get("destination", "").strip().upper()
-    city = args.get("city") or args.get("q", "").strip()
-    from_date = args.get("from_date", "")
-    to_date = args.get("to_date", "")
-
-    placeholders = ", ".join("?" * len(EUROPE_COUNTRIES))
-    query = f"""
-        SELECT origin, city_name, airport_code, date, direction, ag, ap, ab
-        FROM flights
-        WHERE (ag >= ? OR ap >= ? OR ab >= ?) AND country_name IN ({placeholders}) __FILTERS__
-        ORDER BY ag DESC, date, origin, city_name COLLATE NOCASE
-        LIMIT 500
-    """
-    params = [min_seats, min_seats, min_seats] + list(EUROPE_COUNTRIES)
-    conditions = []
-    if origin:
-        conditions.append("origin = ?")
-        params.append(origin)
-    if destination:
-        conditions.append("airport_code = ?")
-        params.append(destination)
-    if city:
-        conditions.append("(city_name LIKE ? OR airport_code LIKE ?)")
-        params.append(f"%{city}%")
-        params.append(f"%{city}%")
-    if from_date:
-        conditions.append("date >= ?")
-        params.append(from_date)
-    if to_date:
-        conditions.append("date <= ?")
-        params.append(to_date)
-    query = query.replace("__FILTERS__", " AND " + " AND ".join(conditions) if conditions else "")
-
-    conn = get_conn()
-    cur = conn.execute(query, params)
-    rows = cur.fetchall()
-    conn.close()
-
-    return render_template(
-        "table.html",
-        title="All Europe (≥{m} seats, any cabin)".format(m=min_seats),
-        rows=rows,
-        columns=["Origin", "City", "Code", "Date", "Direction", "Economy", "Plus", "Business"],
-        filters={
-            "origin": origin,
-            "destination": destination,
-            "city": city,
-            "from_date": from_date,
-            "to_date": to_date,
-            "min_seats": min_seats,
-        },
-        destination_options=get_destination_options(origin),
-    )
-
-
+@app.route("/business")
 @app.route("/plus")
-def plus():
-    """European flights with Plus or Business (≥2 seats)."""
-    args = request.args
-    min_seats = int(args.get("min_seats", MIN_SEATS))
-    origin = args.get("origin", "")
-    destination = args.get("destination", "").strip().upper()
-    city = args.get("city") or args.get("q", "").strip()
-    from_date = args.get("from_date", "")
-    to_date = args.get("to_date", "")
-
-    placeholders = ", ".join("?" for _ in EUROPE_COUNTRIES)
-    conditions = ["(ap >= ? OR ab >= ?)", "country_name IN ({})".format(placeholders)]
-    params = [min_seats, min_seats] + list(EUROPE_COUNTRIES)
-
-    if origin:
-        conditions.append("origin = ?")
-        params.append(origin)
-    if destination:
-        conditions.append("airport_code = ?")
-        params.append(destination)
-    if city:
-        conditions.append("(city_name LIKE ? OR airport_code LIKE ?)")
-        params.append("%{}%".format(city))
-        params.append("%{}%".format(city))
-    if from_date:
-        conditions.append("date >= ?")
-        params.append(from_date)
-    if to_date:
-        conditions.append("date <= ?")
-        params.append(to_date)
-
-    where_clause = " AND ".join(conditions)
-    query = """
-        SELECT origin, city_name, airport_code, date, direction, ap, ab
-        FROM flights
-        WHERE {}
-        ORDER BY date, origin, city_name COLLATE NOCASE
-        LIMIT 500
-    """.format(where_clause)
-
-    conn = get_conn()
-    cur = conn.execute(query, params)
-    rows = cur.fetchall()
-    conn.close()
-
-    return render_template(
-        "table.html",
-        title="Plus & Business Europe (≥{m} seats)".format(m=min_seats),
-        rows=rows,
-        columns=["Origin", "City", "Code", "Date", "Direction", "Plus", "Business"],
-        filters={
-            "origin": origin,
-            "destination": destination,
-            "city": city,
-            "from_date": from_date,
-            "to_date": to_date,
-            "min_seats": min_seats,
-        },
-        destination_options=get_destination_options(origin),
-    )
+def _removed_sas_views():
+    """Removed: redirect to dashboard."""
+    return redirect("/")
 
 
 @app.route("/weekend")
@@ -1504,18 +1696,8 @@ def new_flights():
 
 @app.route("/search")
 def search():
-    q = request.args.get("q", "").strip()
-    if not q:
-        return render_template("search.html", q="", results=[])
-    conn = get_conn()
-    cur = conn.execute("""
-        SELECT DISTINCT origin, city_name, airport_code FROM flights
-        WHERE city_name LIKE ? OR airport_code LIKE ?
-        ORDER BY city_name COLLATE NOCASE LIMIT 50
-    """, (f"%{q}%", f"%{q}%"))
-    results = cur.fetchall()
-    conn.close()
-    return render_template("search.html", q=q, results=results)
+    """Removed: redirect to dashboard."""
+    return redirect("/")
 
 
 LONG_HAUL_COUNTRIES = (
@@ -1608,7 +1790,8 @@ def get_europe_class_config(min_seats, include_economy, include_plus_business):
 
 @app.route("/reports")
 def reports_index():
-    return render_template("reports_index.html")
+    """Removed: reports moved to dashboard."""
+    return redirect("/")
 
 
 @app.route("/reports/business-by-date")

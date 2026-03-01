@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Virgin Atlantic Reports – SAS Awards{% endblock %}
+{% block content %}
+<div class="page-header">
+  <p style="margin:0 0 0.25rem;font-size:0.9rem;">
+    <a href="/partner-awards/virgin">← Dashboard</a>
+  </p>
+  <h1 class="page-title">Virgin Atlantic Reports</h1>
+  <p class="page-subtitle" style="margin:0;color:var(--color-text-secondary);font-size:1rem;">Summary · Year view · Discovery · Heatmap</p>
+</div>
+
+<form method="get" action="/partner-awards/virgin/reports" class="toolbar filters" style="margin-bottom:1rem;opacity:0.7;">
+  <input type="hidden" name="tab" value="{{ tab }}">
+  <label>
+    Month
+    <select name="month" disabled style="width:10rem;">
+      {% for m in months_all %}
+      <option value="{{ m }}" {% if month == m %}selected{% endif %}>{{ m }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>
+    Cabin
+    <select name="cabin" disabled>
+      <option value="BUSINESS" {% if cabin == 'BUSINESS' %}selected{% endif %}>Business</option>
+      <option value="PREMIUM" {% if cabin == 'PREMIUM' %}selected{% endif %}>Premium Economy</option>
+    </select>
+  </label>
+</form>
+
+<nav class="report-tabs" style="margin-bottom:1rem;border-bottom:1px solid var(--color-border-default);">
+  <a href="{{ report_url('summary') }}" class="{% if tab == 'summary' %}active{% endif %}">Summary</a>
+  <a href="{{ report_url('year-view') }}" class="{% if tab == 'year-view' %}active{% endif %}">Year view</a>
+  <a href="{{ report_url('discovery') }}" class="{% if tab == 'discovery' %}active{% endif %}">Discovery</a>
+  <a href="{{ report_url('heatmap') }}" class="{% if tab == 'heatmap' %}active{% endif %}">Heatmap</a>
+</nav>
+
+<div class="card">
+  <div class="card-inner">
+    <p style="margin:0;color:var(--color-text-muted);"><strong>Coming soon.</strong> {{ tab }} reports will be available when Virgin Atlantic award tracking is implemented.</p>
+  </div>
+</div>
+
+<style>
+.report-tabs a { display:inline-block; padding:0.5rem 1rem; margin-right:0.25rem; text-decoration:none; color:var(--color-text-secondary); border-radius:4px 4px 0 0; }
+.report-tabs a:hover { background:var(--color-bg-secondary); color:var(--color-text-primary); }
+.report-tabs a.active { background:var(--color-bg-primary); color:var(--color-text-primary); font-weight:600; border-bottom:2px solid var(--color-bg-primary); margin-bottom:-1px; }
+</style>
+{% endblock %}

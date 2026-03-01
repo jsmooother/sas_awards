@@ -450,7 +450,7 @@ def _parse_lowest_fare_entries(
                     tax = _tax_from(v)
                     for cab in cabin_list:
                         entries.append((k, cab, miles, tax))
-        # List format
+        # List format (connections)
         for conn in (node.get("connections") or []):
             if not isinstance(conn, dict):
                 continue
@@ -467,6 +467,27 @@ def _parse_lowest_fare_entries(
                 if cab not in cabin_list:
                     cab = cabin_list[0]
                 entries.append((date_str, cab, miles, tax))
+        # lowestOffers format (array of {flightDate, displayPrice, totalTaxDetails, ...})
+        for item in (node.get("lowestOffers") or []):
+            if not isinstance(item, dict):
+                continue
+            dt = item.get("flightDate")
+            miles = _miles_from(item)
+            if miles is None:
+                miles = item.get("displayPrice") or item.get("totalPrice")
+            if dt and miles is not None:
+                date_str = str(dt)[:10]
+                try:
+                    datetime.strptime(date_str, "%Y-%m-%d")
+                except ValueError:
+                    continue
+                tax = _tax_from(item)
+                if tax is None and isinstance(item.get("totalTaxDetails"), dict):
+                    tax = item["totalTaxDetails"].get("totalPrice")
+                if tax is None and isinstance(item.get("splitTaxDetails"), dict):
+                    tax = item["splitTaxDetails"].get("totalPrice")
+                for cab in cabin_list:
+                    entries.append((date_str, cab, int(miles), float(tax) if tax is not None else None))
 
     # Deduplicate: (date, cabin) -> keep first
     seen: Dict[tuple, bool] = {}

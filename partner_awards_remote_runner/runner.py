@@ -26,6 +26,7 @@ from airfrance_client_pw import (
     build_available_offers,
     build_create_context,
     build_lowest_fares,
+    _parse_cookie_string,
 )
 
 DEFAULT_HOSTS = [
@@ -63,6 +64,31 @@ def _load_config() -> Dict[str, Any]:
     return config
 
 
+def _load_cookies(cfg: Dict, base_url: str = "https://www.klm.se") -> List[Dict[str, Any]]:
+    """Load cookies from config: cookies (list), cookie_string (curl -b), or cookies_file (JSON path).
+    For authenticated Flying Blue: export cookies from DevTools when logged in."""
+    cookies = cfg.get("cookies")
+    if isinstance(cookies, list) and cookies:
+        return cookies
+    cookie_str = cfg.get("cookie_string") or os.environ.get("AF_COOKIE_STRING")
+    if cookie_str:
+        from urllib.parse import urlparse
+        parsed = urlparse(base_url)
+        domain = "." + parsed.netloc.lstrip("www.") if parsed.netloc else ".klm.se"
+        return _parse_cookie_string(cookie_str, domain=domain)
+    cookies_path = cfg.get("cookies_file") or os.environ.get("AF_COOKIES_FILE")
+    if cookies_path:
+        fp = Path(cookies_path).expanduser().resolve()
+        if fp.exists():
+            with open(fp, encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, list):
+                return data
+            if isinstance(data, dict) and "cookies" in data:
+                return data["cookies"]
+    return []
+
+
 def _url_params_from_host(host: Dict[str, Any], cfg: Dict) -> Dict[str, str]:
     return {
         "bookingFlow": cfg.get("url_booking_flow", "LEISURE"),
@@ -75,6 +101,9 @@ def _url_params_from_host(host: Dict[str, Any], cfg: Dict) -> Dict[str, str]:
 
 def _headers_from_host(host: Dict[str, Any], cfg: Dict) -> Dict[str, str]:
     base = host["base_url"].rstrip("/")
+    from urllib.parse import urlparse
+    parsed = urlparse(base)
+    host_header = parsed.netloc or "www.klm.se"
     return {
         "origin": base,
         "referer": f"{base}/en/search/open-dates/0",
@@ -85,6 +114,9 @@ def _headers_from_host(host: Dict[str, Any], cfg: Dict) -> Dict[str, str]:
         "afkl-travel-language": host.get("language", "en"),
         "afkl-travel-market": host.get("market", "SE"),
         "afkl-travel-host": host.get("brand", "KL"),
+        "x-aviato-host": host_header,
+        "country": host.get("country", "SE"),
+        "language": host.get("language", "en"),
     }
 
 
@@ -132,12 +164,31 @@ def _parse_lowest_fare_dates(body: Dict[str, Any], max_days: int) -> List[str]:
                     miles = conn.get("miles") or (conn.get("price") or {}).get("amount") if isinstance(conn.get("price"), dict) else None
                     if dt and miles is not None:
                         candidates.append((str(dt)[:10], int(miles)))
+        for item in (node.get("lowestOffers") or []):
+            if isinstance(item, dict):
+                dt = item.get("flightDate")
+                miles = item.get("displayPrice") or item.get("totalPrice") or (item.get("price") or {}).get("amount") if isinstance(item.get("price"), dict) else None
+                if dt and miles is not None:
+                    candidates.append((str(dt)[:10], int(miles)))
     if not candidates:
         return []
     seen = set()
     unique = [(d, m) for d, m in candidates if d not in seen and not seen.add(d)]
     unique.sort(key=lambda x: (x[1], x[0]))
     return [d for d, _ in unique[:max_days]]
+
+
+def _has_lowest_fare_connections(j: Optional[Dict]) -> bool:
+    """True if LowestFareOffers response has non-empty connections/days/dates/lowestOffers."""
+    data = (j or {}).get("data") or {}
+    offers = data.get("lowestFareOffers") or data
+    if not isinstance(offers, dict):
+        return False
+    conns = offers.get("connections") or offers.get("days") or offers.get("dates")
+    if conns and isinstance(conns, dict):
+        return True
+    lowest = offers.get("lowestOffers")
+    return bool(lowest and isinstance(lowest, list) and len(lowest) > 0)
 
 
 def _host_attempt_entry(host: Dict, ok: bool, status: int, timing_ms: Optional[int], error: Optional[str]) -> Dict:
@@ -156,8 +207,17 @@ async def _try_hosts_warmup(cfg: Dict, log_path: Optional[Path]) -> Optional[tup
     """Try each host until warmup succeeds. Returns (client, host_used, host_attempts) or None.
     On all-fail: writes cooldown state and returns None."""
     attempts: List[Dict] = []
-    for host in cfg.get("hosts_to_try", DEFAULT_HOSTS):
+    hosts = list(cfg.get("hosts_to_try", DEFAULT_HOSTS))
+    prefer = cfg.get("cookie_prefer_host")
+    if prefer and _load_cookies(cfg):
+        # Put preferred host first when we have cookies from that domain
+        hosts = [h for h in hosts if h.get("name") == prefer] + [h for h in hosts if h.get("name") != prefer]
+    base_url = hosts[0].get("base_url", "https://www.klm.se") if hosts else "https://www.klm.se"
+    all_cookies = _load_cookies(cfg, base_url=base_url)
+    for host in hosts:
         name = host.get("name", host.get("base_url", "?"))
+        # Only attach cookies when host matches cookie origin (e.g. AF-US cookies -> AF-US host)
+        host_cookies = all_cookies if (prefer and name == prefer) else []
         headers = _headers_from_host(host, cfg)
         client = AirFrancePlaywrightClient(
             user_agent=cfg["user_agent"],
@@ -165,6 +225,7 @@ async def _try_hosts_warmup(cfg: Dict, log_path: Optional[Path]) -> Optional[tup
             base_url=host["base_url"],
             timeout_ms=cfg.get("warmup_timeout_ms", 60000),
             force_http1=cfg.get("force_http1", False),
+            cookies=host_cookies,
         )
         try:
             result = await client.warmup()
@@ -476,6 +537,20 @@ async def _calendar_scan_impl(
                 max_retries=cfg.get("max_retries", 1),
             )
             _log_line(f"LowestFares ({cab}): status={lowest_res.get('status')}", log_path)
+            if lowest_res["ok"] and lowest_res.get("json") and not _has_lowest_fare_connections(lowest_res["json"]):
+                _log_line(f"LowestFares empty, retrying with AIRPORT/AIRPORT for {origin}-{destination}", log_path)
+                await asyncio.sleep(_pacing_delay(cfg))
+                retry_res = await client.gql_post(
+                    "SharedSearchLowestFareOffersForSearchQuery",
+                    build_lowest_fares(
+                        origin, destination, start_date, end_date, cabins, search_uuid,
+                        origin_type="AIRPORT", destination_type="AIRPORT",
+                    ),
+                    url_params=url_params,
+                    max_retries=cfg.get("max_retries", 1),
+                )
+                if retry_res["ok"] and retry_res.get("json") and _has_lowest_fare_connections(retry_res["json"]):
+                    lowest_res = retry_res
             if lowest_res["ok"] and lowest_res.get("json"):
                 lowest_body = lowest_res["json"]
                 consecutive_blocked = 0
@@ -561,9 +636,13 @@ async def _open_dates_month_impl(
     import calendar as cal_mod
     # month: "2026-03"
     year, m = int(month[:4]), int(month[5:7])
-    last_day = cal_mod.monthrange(year, m)[1]
     start_date = f"{year:04d}-{m:02d}-01"
-    end_date = f"{year:04d}-{m:02d}-{last_day:02d}"
+    # MONTH type: use 12-month window like the open-dates page (e.g. 2026-03-01/2027-02-28)
+    end_m = m + 11
+    end_year = year + (end_m - 1) // 12
+    end_m = ((end_m - 1) % 12) + 1
+    end_day = cal_mod.monthrange(end_year, end_m)[1]
+    end_date = f"{end_year:04d}-{end_m:02d}-{end_day:02d}"
 
     if dry_run:
         _log_line(f"DRY-RUN: open-dates-month {origin}→{destination} {month} cabins={cabins}", log_path)
@@ -599,6 +678,28 @@ async def _open_dates_month_impl(
             max_retries=cfg.get("max_retries", 1),
         )
         _log_line(f"LowestFares MONTH: status={lowest_res.get('status')}", log_path)
+
+        # Fallback: if empty, retry with AIRPORT/AIRPORT (some routes e.g. AMS-CPT need both as airports)
+        if lowest_res["ok"] and lowest_res.get("json") and not _has_lowest_fare_connections(lowest_res["json"]):
+            for retry_name, retry_url_params, retry_kw in [
+                ("AIRPORT/AIRPORT", url_params, {"origin_type": "AIRPORT", "destination_type": "AIRPORT"}),
+                ("bookingFlow=REWARD", {**url_params, "bookingFlow": "REWARD"}, {"origin_type": "CITY", "destination_type": "AIRPORT"}),
+                ("DAY+omit_departure_date", url_params, {"interval_type": "DAY", "omit_departure_date": True, "origin_type": "AIRPORT", "destination_type": "AIRPORT"}),
+            ]:
+                _log_line(f"LowestFares empty, retrying with {retry_name} for {origin}-{destination}", log_path)
+                await asyncio.sleep(_pacing_delay(cfg))
+                kw = {"interval_type": "MONTH", "origin_type": "CITY", "destination_type": "AIRPORT", **retry_kw}
+                retry_res = await client.gql_post(
+                    "SharedSearchLowestFareOffersForSearchQuery",
+                    build_lowest_fares(origin, destination, start_date, end_date, cabins, search_uuid, **kw),
+                    url_params=retry_url_params,
+                    max_retries=cfg.get("max_retries", 1),
+                )
+                if retry_res["ok"] and retry_res.get("json") and _has_lowest_fare_connections(retry_res["json"]):
+                    lowest_res = retry_res
+                    _log_line(f"Retry succeeded ({retry_name}): got connections for {origin}-{destination}", log_path)
+                    break
+
         if not lowest_res["ok"] or not lowest_res.get("json"):
             _log_line(f"LowestFares failed: {lowest_res.get('error', '')[:200]}", log_path)
             return 0
