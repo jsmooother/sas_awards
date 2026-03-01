@@ -19,6 +19,7 @@ log = logging.getLogger(__name__)
 PERSISTED_HASHES = {
     "SharedSearchCreateSearchContextForSearchQuery": "54e5576492358745ae7ee183605ca00eee645cfcd2bc557fedc124cb32140f65",
     "SharedSearchLowestFareOffersForSearchQuery": "3129e42881c15d2897fe99c294497f2cfa8f2133109dd93ed6cad720633b0243",
+    "SharedSearchLowestFareOffersByResourceIdForSearchQuery": "ae4e5e895d81e072a97a0f63faedbfa444460db699731f188d257810ab7fd2ab",
     "SearchResultAvailableOffersQuery": "6c2316d35d088fdd0d346203ec93cec7eea953752ff2fc18a759f9f2ba7b690a",
 }
 
@@ -129,6 +130,38 @@ def build_lowest_fares(
             "persistedQuery": {
                 "version": 1,
                 "sha256Hash": PERSISTED_HASHES["SharedSearchLowestFareOffersForSearchQuery"],
+            }
+        },
+    }
+
+
+def build_lowest_fares_by_resource_id(
+    unique_resource_id: str,
+    date_interval: str,
+    commercial_cabin: str,
+    active_connection: int = 1,
+) -> Dict[str, Any]:
+    """Build payload for return leg: SharedSearchLowestFareOffersByResourceIdForSearchQuery.
+    unique_resource_id from outbound response data.lowestFareOffers.resourceIds.self .
+    active_connection=1 for return leg."""
+    return {
+        "operationName": "SharedSearchLowestFareOffersByResourceIdForSearchQuery",
+        "variables": {
+            "uniqueResourceId": unique_resource_id,
+            "lowestOffersByResourceIdOptions": {
+                "activeConnection": active_connection,
+                "type": "DAY",
+                "dateInterval": date_interval,
+                "commercialCabin": commercial_cabin,
+                "displayPriceContent": "ALL_PAX",
+                "negotiatedFareOnly": False,
+            },
+            "bookingFlow": "REWARD",
+        },
+        "extensions": {
+            "persistedQuery": {
+                "version": 1,
+                "sha256Hash": PERSISTED_HASHES["SharedSearchLowestFareOffersByResourceIdForSearchQuery"],
             }
         },
     }

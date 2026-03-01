@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import copy
 import json
 import logging
 import os
@@ -26,6 +27,7 @@ from airfrance_client_pw import (
     build_available_offers,
     build_create_context,
     build_lowest_fares,
+    build_lowest_fares_by_resource_id,
     _parse_cookie_string,
 )
 
@@ -179,9 +181,10 @@ def _parse_lowest_fare_dates(body: Dict[str, Any], max_days: int) -> List[str]:
 
 
 def _has_lowest_fare_connections(j: Optional[Dict]) -> bool:
-    """True if LowestFareOffers response has non-empty connections/days/dates/lowestOffers."""
+    """True if LowestFareOffers (or ByResourceId) response has non-empty connections/days/dates/lowestOffers."""
     data = (j or {}).get("data") or {}
-    offers = data.get("lowestFareOffers") or data
+    # ByResourceId uses lowestFareOffersByResourceId; standard search uses lowestFareOffers
+    offers = data.get("lowestFareOffers") or data.get("lowestFareOffersByResourceId") or data
     if not isinstance(offers, dict):
         return False
     conns = offers.get("connections") or offers.get("days") or offers.get("dates")
@@ -728,6 +731,50 @@ async def _open_dates_month_impl(
         _write_meta(out_dir, host_used, host_attempts, cfg, origin=origin, destination=destination,
             start_date=start_date, end_date=end_date, cabins=cabins, search_type="MONTH")
         _log_line(f"Wrote {out_path}", log_path)
+
+        # Return leg: use ByResourceId API with resourceIds.self from outbound response
+        outbound_body = lowest_res.get("json") or {}
+        lfo = (outbound_body.get("data") or {}).get("lowestFareOffers") or {}
+        resource_links = lfo.get("resourceIds") or {}
+        unique_resource_id = resource_links.get("self") if isinstance(resource_links, dict) else None
+        date_interval = f"{start_date}/{end_date}"
+        return_url_params = {**url_params, "bookingFlow": "REWARD"}
+        return_count = 0
+        if unique_resource_id:
+            for cabin in cabins:
+                await asyncio.sleep(_pacing_delay(cfg))
+                return_res = await client.gql_post(
+                    "SharedSearchLowestFareOffersByResourceIdForSearchQuery",
+                    build_lowest_fares_by_resource_id(unique_resource_id, date_interval, cabin, active_connection=1),
+                    url_params=return_url_params,
+                    max_retries=cfg.get("max_retries", 1),
+                )
+                _log_line(f"LowestFaresByResourceId return {cabin}: status={return_res.get('status')}", log_path)
+                return_json = return_res.get("json")
+                has_data = _has_lowest_fare_connections(return_json)
+                # ByResourceId may return lowestFareOffers or lowestFareOffersByResourceId; write whenever we have a body
+                if return_res.get("ok") and return_json:
+                    data = (return_json.get("data") or {})
+                    lfo = data.get("lowestFareOffers") or data.get("lowestFareOffersByResourceId")
+                    if isinstance(lfo, dict):
+                        return_dir = output_base / "AF" / f"{destination}-{origin}" / month
+                        return_dir.mkdir(parents=True, exist_ok=True)
+                        ts2 = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        return_fname = f"lowest_fares_MONTH_{cabin}_return_{ts2}.json"
+                        # Normalize to data.lowestFareOffers so ingest works
+                        body = copy.deepcopy(return_json)
+                        if "lowestFareOffersByResourceId" in (body.get("data") or {}) and "lowestFareOffers" not in (body.get("data") or {}):
+                            body.setdefault("data", {})["lowestFareOffers"] = body["data"].pop("lowestFareOffersByResourceId", {})
+                        return_wrapped = {"meta_ref": "./.meta.json", "operationName": "SharedSearchLowestFareOffersByResourceIdForSearchQuery", "body": body}
+                        with open(return_dir / return_fname, "w", encoding="utf-8") as f:
+                            json.dump(return_wrapped, f, indent=2, ensure_ascii=False)
+                        _write_meta(return_dir, host_used, host_attempts, cfg, origin=destination, destination=origin,
+                            start_date=start_date, end_date=end_date, cabins=[cabin], search_type="MONTH_return")
+                        _log_line(f"Wrote return {destination}-{origin} {return_fname}" + ("" if has_data else " (no/lowestOffers)"), log_path)
+                        return_count += 1
+        else:
+            _log_line("No resourceIds.self in outbound response, skipping return leg", log_path)
+
         return 1
     finally:
         await client.close()

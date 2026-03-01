@@ -18,6 +18,7 @@ import httpx
 from .adapter import (
     create_scan_run,
     init_db,
+    ingest_lowest_fares,
     parse_search_result_available_offers,
     store_raw_response,
     upsert_offers,
@@ -143,6 +144,22 @@ AF_HEADERS = {
     "afkl-travel-market": "FR",
     "afkl-travel-host": "AF",
 }
+# KLM.se – SharedSearchLowestFareOffersForSearchQuery; can be tried without login (no CreateSearchContext).
+# Set PARTNER_AWARDS_KLM_NO_LOGIN=1 to enable; disabled by default (often does not work in practice).
+KLM_NO_LOGIN_ENABLED = os.environ.get("PARTNER_AWARDS_KLM_NO_LOGIN", "").strip() in ("1", "true", "yes")
+KLM_GQL_URL = "https://www.klm.se/gql/v1"
+KLM_BASE = "https://www.klm.se"
+KLM_HEADERS = {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "origin": KLM_BASE,
+    "referer": f"{KLM_BASE}/en/search/open-dates/0",
+    "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "afkl-travel-country": "SE",
+    "afkl-travel-language": "en",
+    "afkl-travel-market": "SE",
+    "afkl-travel-host": "KL",
+}
 # Separate timeouts: connect 10s, read 60s (detect hang vs slow response)
 HTTP_CONNECT_TIMEOUT = 10.0
 HTTP_READ_TIMEOUT = 60.0
@@ -151,13 +168,19 @@ LOWEST_FARE_HASH = "3129e42881c15d2897fe99c294497f2cfa8f2133109dd93ed6cad720633b
 AVAILABLE_OFFERS_HASH = "6c2316d35d088fdd0d346203ec93cec7eea953752ff2fc18a759f9f2ba7b690a"
 
 
-def _timed_post(url: str, json_payload: Dict[str, Any], log_prefix: str = "") -> tuple:
+def _timed_post(
+    url: str,
+    json_payload: Dict[str, Any],
+    log_prefix: str = "",
+    headers: Optional[Dict[str, str]] = None,
+) -> tuple:
     """
     POST with httpx, separate connect/read timeouts.
     Returns (response_or_none, error_str_or_none, timing_dict).
     timing_dict: connect_ms, read_ms, total_ms, phase (where it hung if error).
     """
     log = logging.getLogger(__name__)
+    h = headers if headers is not None else AF_HEADERS
     timing: Dict[str, Any] = {}
     t0 = time.perf_counter()
     try:
@@ -166,7 +189,7 @@ def _timed_post(url: str, json_payload: Dict[str, Any], log_prefix: str = "") ->
             follow_redirects=True,
             trust_env=False,
         ) as client:
-            r = client.post(url, headers=AF_HEADERS, json=json_payload)
+            r = client.post(url, headers=h, json=json_payload)
             t_done = time.perf_counter()
         timing["connect_ms"] = 0  # httpx doesn't expose connect vs read separately
         timing["total_ms"] = round((t_done - t0) * 1000)
@@ -866,4 +889,117 @@ def calendar_scan(
         "candidate_dates": candidate_dates[:max_offer_days],
         "dates_fetched": len(candidate_dates[:max_offer_days]),
         "inserted_offer_count": total_inserted,
+    }
+
+
+def calendar_scan_klm_no_login(
+    conn,
+    *,
+    origin: str,
+    destination: str,
+    date_interval: str,
+    cabins: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """
+    Fetch calendar (LowestFareOffers only) from KLM.se without login.
+    Disabled by default; set PARTNER_AWARDS_KLM_NO_LOGIN=1 to enable.
+    """
+    if not KLM_NO_LOGIN_ENABLED:
+        return {
+            "ok": False,
+            "error": "KLM no-login is disabled",
+            "detail": "Set PARTNER_AWARDS_KLM_NO_LOGIN=1 to enable (may not work in practice).",
+        }
+    log = logging.getLogger(__name__)
+    cabins = cabins or ["BUSINESS"]
+    search_state_uuid = str(uuid.uuid4())
+    init_db(conn)
+
+    # Origin/destination: support AIRPORT or CITY; KLM often uses origin AIRPORT, destination CITY
+    def _loc(t: str, code: str) -> Dict[str, str]:
+        return {"type": t, "code": code}
+
+    # First leg: outbound (e.g. AMS -> BKK). Second: return (e.g. BKK -> AMS)
+    lowest_payload = {
+        "operationName": "SharedSearchLowestFareOffersForSearchQuery",
+        "variables": {
+            "lowestFareOffersRequest": {
+                "bookingFlow": "REWARD",
+                "withUpsellCabins": True,
+                "passengers": [{"id": 1, "type": "ADT"}],
+                "commercialCabins": cabins,
+                "fareOption": None,
+                "type": "MONTH",
+                "requestedConnections": [
+                    {
+                        "dateInterval": date_interval,
+                        "origin": _loc("AIRPORT", origin),
+                        "destination": _loc("CITY", destination),
+                    },
+                    {
+                        "dateInterval": None,
+                        "origin": _loc("CITY", destination),
+                        "destination": _loc("AIRPORT", origin),
+                    },
+                ],
+            },
+            "activeConnection": 0,
+            "searchStateUuid": search_state_uuid,
+            "bookingFlow": "REWARD",
+        },
+        "extensions": {"persistedQuery": {"version": 1, "sha256Hash": LOWEST_FARE_HASH}},
+    }
+
+    r, err, timing = _timed_post(
+        KLM_GQL_URL,
+        lowest_payload,
+        "LowestFareOffers(KLM-no-login)",
+        headers=KLM_HEADERS,
+    )
+    if err or not r:
+        return {"ok": False, "error": "LowestFareOffers failed", "detail": err or "no response", "timing": timing}
+    if r.status_code != 200:
+        return {"ok": False, "error": f"LowestFareOffers {r.status_code}", "detail": (r.text or "")[:2000], "timing": timing}
+    try:
+        cal_body = r.json()
+    except Exception as e:
+        return {"ok": False, "error": "Invalid JSON", "detail": str(e), "timing": timing}
+
+    scan_run_id = create_scan_run(
+        conn,
+        source="AF",
+        ingest_type="klm_no_login",
+        origin=origin,
+        destination=destination,
+        cabin_requested=cabins[0],
+        depart_date=None,
+    )
+    store_raw_response(
+        conn,
+        scan_run_id=scan_run_id,
+        source="AF",
+        operation_name="SharedSearchLowestFareOffersForSearchQuery",
+        origin=origin,
+        destination=destination,
+        depart_date=None,
+        cabin_requested=cabins[0],
+        body=cal_body,
+    )
+    inserted = ingest_lowest_fares(
+        conn,
+        scan_run_id=scan_run_id,
+        payload=cal_body,
+        origin=origin,
+        destination=destination,
+        cabins=cabins,
+        host_used="klm.se",
+        source="AF",
+    )
+
+    return {
+        "ok": True,
+        "inserted_calendar_fares": inserted,
+        "scan_run_id": scan_run_id,
+        "host": "klm.se",
+        "timing": timing,
     }

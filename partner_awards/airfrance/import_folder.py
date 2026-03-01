@@ -215,7 +215,7 @@ def _unwrap_payload(data: dict) -> tuple[dict, str | None]:
 def _is_lowest_fares_response(data: dict) -> bool:
     """Check if JSON is LowestFareOffers (wrapped or raw)."""
     body, op = _unwrap_payload(data)
-    if op == "SharedSearchLowestFareOffersForSearchQuery":
+    if op in ("SharedSearchLowestFareOffersForSearchQuery", "SharedSearchLowestFareOffersByResourceIdForSearchQuery"):
         return True
     return isinstance(body, dict) and "data" in body and isinstance(
         (body.get("data") or {}).get("lowestFareOffers"), dict
@@ -251,7 +251,9 @@ def ingest_lowest_fares_file(
     search = _meta_search(meta)
     origin = search.get("origin") or (meta or {}).get("origin") or origin
     destination = search.get("destination") or (meta or {}).get("destination") or destination
-    cabins = search.get("cabins") or (meta or {}).get("cabins") or _parse_cabins_from_lowest_fares_filename(filepath.name)
+    # Prefer cabin from filename so mixed BUSINESS/PREMIUM folder uses correct cabin per file
+    cabins_from_file = _parse_cabins_from_lowest_fares_filename(filepath.name)
+    cabins = cabins_from_file if (cabins_from_file and cabins_from_file != ["ECONOMY"]) else (search.get("cabins") or (meta or {}).get("cabins") or cabins_from_file)
     if not isinstance(cabins, list):
         cabins = [cabins] if cabins else ["ECONOMY"]
 

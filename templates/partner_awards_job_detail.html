@@ -14,7 +14,7 @@
     <p><strong>Status:</strong> {{ job.status }} · <strong>Type:</strong> {{ job.job_type }}</p>
     <p><strong>Created:</strong> {{ job.created_at }} · <strong>Started:</strong> {{ job.started_at or '—' }} · <strong>Finished:</strong> {{ job.finished_at or '—' }}</p>
     {% set p = job.progress %}
-    <p><strong>Progress:</strong> {{ p.done_tasks or 0 }}/{{ p.total_tasks or 0 }}{% if p.skipped_tasks %} · {{ p.skipped_tasks }} skipped (24h){% endif %}{% if p.current_task %} · Current: {{ p.current_task }}{% endif %}</p>
+    <p><strong>Progress:</strong> {{ p.done_tasks or 0 }}/{{ p.total_tasks or 0 }}{% if job.finished_at %} · Retrieved {{ job.finished_at[:16].replace('T',' ') }}{% endif %}{% if p.current_task %} · Current: {{ p.current_task }}{% endif %}</p>
     {% if job.last_error %}
     <p style="color:var(--color-text-danger);"><strong>Last error:</strong> {{ job.last_error }}</p>
     {% endif %}

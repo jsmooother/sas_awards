@@ -235,9 +235,9 @@ def build_daily_year_calendar(
             css_class = "hm-min"
         elif route_min and route_min > 0:
             ratio = miles / route_min
-            if ratio <= 1.1:
+            if ratio <= 1.2:
                 css_class = "hm-low"
-            elif ratio <= 1.3:
+            elif ratio <= 2.5:
                 css_class = "hm-mid"
             else:
                 css_class = "hm-high"

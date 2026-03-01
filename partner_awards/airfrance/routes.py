@@ -8,7 +8,15 @@ from pathlib import Path
 
 from flask import Blueprint, request, jsonify
 
-from .service import calendar_scan, ingest_fixture, live_test, live_test_direct, live_test_playwright, sanity_check
+from .service import (
+    calendar_scan,
+    calendar_scan_klm_no_login,
+    ingest_fixture,
+    live_test,
+    live_test_direct,
+    live_test_playwright,
+    sanity_check,
+)
 
 # Separate DB for partner awards (no SAS tables)
 PARTNER_DB_DIR = os.path.expanduser(os.environ.get("SAS_DB_PATH", "~/sas_awards"))
@@ -244,6 +252,33 @@ def calendar_scan_route():
             days=days,
             cabins=cabins,
             max_offer_days=max_offer_days,
+        )
+        return jsonify(result)
+    finally:
+        conn.close()
+
+
+@bp.route("/calendar-scan-klm-no-login", methods=["POST"])
+def calendar_scan_klm_no_login_route():
+    """
+    Calendar only via KLM.se without login. No CreateSearchContext or Playwright.
+    Body: { origin, destination, date_interval, cabins? }
+    Example date_interval: "2026-03-01/2027-02-28" (type MONTH).
+    """
+    data = request.get_json(silent=True) or {}
+    origin = data.get("origin", "AMS")
+    destination = data.get("destination", "BKK")
+    date_interval = data.get("date_interval", "2026-03-01/2027-02-28")
+    cabins = data.get("cabins") or ["BUSINESS"]
+
+    conn = get_partner_conn()
+    try:
+        result = calendar_scan_klm_no_login(
+            conn,
+            origin=origin,
+            destination=destination,
+            date_interval=date_interval,
+            cabins=cabins,
         )
         return jsonify(result)
     finally:

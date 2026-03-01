@@ -5,6 +5,7 @@ Access from LAN: http://<macmini-ip>:5000
 """
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 import datetime as _dt
@@ -1024,12 +1025,53 @@ def partner_awards_flyingblue_run_batch():
     conn.commit()
     conn.close()
 
-    flash(
-        f"Job queued ({enabled_count} routes). Run the worker in a terminal: "
-        "python -m partner_awards.jobs_worker",
-        "success",
-    )
+    # Start worker in background so the job is processed without running a separate terminal
+    project_root = Path(__file__).resolve().parent
+    try:
+        subprocess.Popen(
+            [sys.executable, "-m", "partner_awards.jobs_worker"],
+            cwd=str(project_root),
+            env=os.environ.copy(),
+            start_new_session=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception:
+        pass  # If spawn fails, user can still run the worker manually
+
     return redirect(request.referrer or "/partner-awards/flyingblue")
+
+
+@app.route("/partner-awards/flyingblue/status", methods=["GET"])
+def partner_awards_flyingblue_status():
+    """JSON: latest Flying Blue job progress for status poller."""
+    db_path = _get_partner_db_path()
+    out = {"job": None}
+    if os.path.exists(db_path):
+        from partner_awards.airfrance.adapter import init_db
+        conn = sqlite3.connect(db_path)
+        init_db(conn)
+        cur = conn.execute(
+            """SELECT id, status, progress_json, last_error, started_at, finished_at
+               FROM partner_award_jobs WHERE program='flyingblue'
+               ORDER BY id DESC LIMIT 1"""
+        )
+        row = cur.fetchone()
+        conn.close()
+        if row:
+            try:
+                progress = json.loads(row[2] or "{}")
+            except Exception:
+                progress = {}
+            out["job"] = {
+                "id": row[0],
+                "status": row[1],
+                "progress": progress,
+                "last_error": row[3],
+                "started_at": row[4],
+                "finished_at": row[5],
+            }
+    return jsonify(out)
 
 
 @app.route("/partner-awards/flyingblue/ingest", methods=["GET"])
@@ -1069,7 +1111,7 @@ def partner_awards_watchlist_seed_recommended():
                 existing.add((o, d))
             continue
         try:
-            upsert_watch_route(conn, "flyingblue", o, d, enabled=1)
+            upsert_watch_route(conn, "flyingblue", o, d, enabled=1, include_returns=1)
             added += 1
             existing.add((o, d))
         except ValueError:
@@ -1092,7 +1134,7 @@ def partner_awards_watchlist_add():
     conn = sqlite3.connect(db_path)
     init_db(conn)
     try:
-        upsert_watch_route(conn, program, origin, destination, enabled=1)
+        upsert_watch_route(conn, program, origin, destination, enabled=1, include_returns=1)
     except ValueError as e:
         flash(str(e), "error")
     finally:

@@ -26,6 +26,17 @@ EXPECTED_AMS_JNB_2026_03_BUSINESS = {
     30: 85000, 31: 85000,
 }
 
+# Amsterdam → Bangkok, Business, March 2026. We parse first connection (outbound) per date.
+# API returns connections as [outbound, return]; calendar shows "lowest for departing flight".
+# Days 1–2: API has no price; day 3: 563k (KLM may show 0.6m rounded).
+EXPECTED_AMS_BKK_2026_03_BUSINESS = {
+    3: 563000, 5: 85500, 6: 85500, 7: 85500, 8: 85500,
+    9: 402500, 10: 85500, 11: 85500, 12: 85500, 13: 85500, 14: 85500, 15: 95500,
+    16: 85500, 17: 85000, 18: 85000, 19: 130500, 20: 209500, 21: 281500,
+    22: 209500, 23: 281500, 24: 209500, 25: 130500, 26: 209500, 27: 281500,
+    28: 209500, 29: 281500, 30: 209500, 31: 209500,
+}
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Verify calendar fares against expected values")
@@ -41,9 +52,12 @@ def main() -> int:
         print("FAIL: DB not found:", PARTNER_DB_PATH)
         return 1
 
-    expected = EXPECTED_AMS_JNB_2026_03_BUSINESS if (
-        args.origin == "AMS" and args.destination == "JNB" and args.month == "2026-03" and args.cabin == "BUSINESS"
-    ) else {}
+    if args.origin == "AMS" and args.destination == "JNB" and args.month == "2026-03" and args.cabin == "BUSINESS":
+        expected = EXPECTED_AMS_JNB_2026_03_BUSINESS
+    elif args.origin == "AMS" and args.destination == "BKK" and args.month == "2026-03" and args.cabin == "BUSINESS":
+        expected = EXPECTED_AMS_BKK_2026_03_BUSINESS
+    else:
+        expected = {}
 
     conn = sqlite3.connect(PARTNER_DB_PATH)
     conn.row_factory = sqlite3.Row

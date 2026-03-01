@@ -101,20 +101,56 @@
         <input type="checkbox" name="force_refresh" value="1">
         <span>Force refresh (ignore 24h cooldown per route)</span>
       </label>
-      <button type="submit" class="btn-primary" {% if not enabled_count %}disabled title="Enable at least one route below"{% endif %}>Start run (12 months, Business + Premium)</button>
+      <button type="submit" class="btn-primary" {% if not enabled_count %}disabled title="Enable at least one route below"{% endif %}>Start Run</button>
     </form>
-    {% if latest_job %}
-    <div class="table-hint" style="margin:0 0 0.5rem;padding:0.5rem;background:var(--color-bg-secondary,#f8f9fa);border-radius:4px;">
-      <strong>Latest job:</strong> {{ latest_job.status }} · {{ latest_job.progress.done_tasks or 0 }}/{{ latest_job.progress.total_tasks or 0 }}{% if latest_job.progress.skipped_tasks %} · {{ latest_job.progress.skipped_tasks }} skipped (24h){% endif %}
-      {% if latest_job.progress.current_task %} · {{ latest_job.progress.current_task }}{% endif %}
-      · <a href="/partner-awards/jobs/{{ latest_job.id }}">Detail</a>
+    <div id="job-status" class="table-hint" style="margin:0 0 0.5rem;padding:0.5rem;background:var(--color-bg-secondary,#f8f9fa);border-radius:4px;">
+      {% if latest_job %}
+      <strong>Run status:</strong> <span id="job-status-text">{{ latest_job.status }}</span> · <span id="job-progress-count">{{ latest_job.progress.done_tasks or 0 }}/{{ latest_job.progress.total_tasks or 0 }}</span><span id="job-timestamp">{% if latest_job.finished_at %} · Retrieved {{ latest_job.finished_at[:16].replace('T',' ') }}{% elif latest_job.started_at %} · Started {{ latest_job.started_at[:16].replace('T',' ') }}{% endif %}</span><span id="job-current-task" style="{% if not latest_job.progress.current_task %}display:none;{% endif %}">{% if latest_job.progress.current_task %} · {{ latest_job.progress.current_task }}{% endif %}</span>
+      · <a href="/partner-awards/jobs/{{ latest_job.id }}" id="job-detail-link">Detail</a>
       {% if latest_job.last_error %}
-      <br><span style="color:var(--color-text-danger);font-size:0.85rem;">{{ latest_job.last_error }}</span>
+      <br><span id="job-error" style="color:var(--color-text-danger);font-size:0.85rem;">{{ latest_job.last_error }}</span>
+      {% else %}
+      <span id="job-error"></span>
+      {% endif %}
+      {% else %}
+      <span id="job-status-text">No run yet.</span> <span id="job-progress-count"></span><span id="job-timestamp"></span><span id="job-current-task"></span> <a href="#" id="job-detail-link" style="display:none;">Detail</a><span id="job-error"></span>
+      <p style="margin:0.5rem 0 0;font-size:0.9rem;">Click <strong>Start Run</strong> above to queue a job and run the worker in the background. To run manually: <code>python -m partner_awards.jobs_worker</code></p>
       {% endif %}
     </div>
-    {% else %}
-    <p class="table-hint" style="margin:0 0 1rem;font-size:0.9rem;">Run the worker: <code>python -m partner_awards.jobs_worker</code></p>
-    {% endif %}
+    <script>
+    (function() {
+      var statusEl = document.getElementById('job-status-text');
+      var countEl = document.getElementById('job-progress-count');
+      var taskEl = document.getElementById('job-current-task');
+      var linkEl = document.getElementById('job-detail-link');
+      var errorEl = document.getElementById('job-error');
+      var interval = setInterval(function() {
+        fetch('/partner-awards/flyingblue/status').then(function(r) { return r.json(); }).then(function(data) {
+          if (!data.job) return;
+          var j = data.job;
+          var p = j.progress || {};
+          statusEl.textContent = j.status;
+          countEl.textContent = (p.done_tasks || 0) + '/' + (p.total_tasks || 0);
+          var tsEl = document.getElementById('job-timestamp');
+          if (tsEl) {
+            var when = j.finished_at || j.started_at;
+            tsEl.textContent = when ? ' · ' + (j.finished_at ? 'Retrieved ' : 'Started ') + when.slice(0, 16).replace('T', ' ') : '';
+            tsEl.style.display = when ? '' : 'none';
+          }
+          if (taskEl) {
+            taskEl.textContent = p.current_task ? ' · ' + p.current_task : '';
+            taskEl.style.display = (p.current_task ? '' : 'none');
+          }
+          if (linkEl) {
+            linkEl.href = '/partner-awards/jobs/' + j.id;
+            linkEl.style.display = j.id ? '' : 'none';
+          }
+          if (errorEl) errorEl.textContent = j.last_error || '';
+          if (j.status === 'finished' || j.status === 'failed') clearInterval(interval);
+        }).catch(function() {});
+      }, 2500);
+    })();
+    </script>
   </div>
 </div>
 
@@ -146,7 +182,6 @@
             <th>Origin</th>
             <th>Destination</th>
             <th>Enabled</th>
-            <th>Include returns</th>
             <th>Last scan</th>
             <th>Coverage</th>
             <th>Actions</th>
@@ -162,13 +197,6 @@
                 <input type="hidden" name="id" value="{{ r.id }}">
                 <input type="hidden" name="enabled" value="{{ '0' if r.enabled else '1' }}">
                 <button type="submit" class="toggle-switch {% if r.enabled %}toggle-on{% endif %}" title="{{ 'On – tap to turn off' if r.enabled else 'Off – tap to turn on' }}" aria-label="{{ 'On' if r.enabled else 'Off' }}"></button>
-              </form>
-            </td>
-            <td>
-              <form method="post" action="/partner-awards/watchlist/toggle-returns" style="display:inline;">
-                <input type="hidden" name="id" value="{{ r.id }}">
-                <input type="hidden" name="include_returns" value="{{ '0' if r.include_returns else '1' }}">
-                <button type="submit" class="toggle-switch {% if r.include_returns %}toggle-on{% endif %}" title="{{ 'Include return leg (e.g. BKK→AMS) in scan – tap to turn off' if r.include_returns else 'Tap to include return in next run' }}" aria-label="Include returns">{% if r.include_returns %}✓{% else %}—{% endif %}</button>
               </form>
             </td>
             <td>{{ r.last_scan_at[:16] if r.last_scan_at else '—' }}</td>
@@ -258,7 +286,7 @@
     <p class="table-hint table-hint-compact" style="margin:0 0 0.75rem;">
       Daily miles ({{ route_filter|replace('-', '→') }}). Today + 1 year.
     </p>
-    <p class="table-hint" style="margin:0 0 0.5rem;font-size:0.8rem;">Legend: <span class="hm-legend hm-legend-green">cheapest</span> <span class="hm-legend hm-legend-blue">mid</span> <span class="hm-legend hm-legend-red">high</span> <span class="hm-legend hm-legend-empty">no data</span></p>
+    <p class="table-hint" style="margin:0 0 0.5rem;font-size:0.8rem;">Legend: <span class="hm-legend hm-legend-green">lowest</span> <span class="hm-legend hm-legend-blue">average</span> <span class="hm-legend hm-legend-red">high</span> <span class="hm-legend hm-legend-empty">no data</span></p>
     <style>
       .fb-year-cal-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 1rem; }
       .fb-year-cal-grid .month-card { min-width: 0; padding: 0.6rem; }
@@ -269,14 +297,16 @@
       .fb-year-cal-grid .calendar-day-blank { border: none; background: transparent; min-height: 38px; }
       .fb-year-cal-grid .calendar-day-num { font-size: 0.7rem; }
       .fb-year-cal-grid .calendar-day-badge { font-size: 0.7rem; }
-      /* 3 price bands: green = cheapest, blue = mid, light red = high. Black text. */
+      .fb-year-cal-grid .calendar-day-badge,
+      .fb-year-cal-grid .calendar-day-badge-out { background: transparent !important; color: #000 !important; }
+      /* Green = lowest, blue = average (near min up to ~2.5×), light red = high. Black text. */
       .fb-year-cal-grid .calendar-day.hm-min { background: #c8e6c9 !important; color: #000 !important; }
-      .fb-year-cal-grid .calendar-day.hm-low,
-      .fb-year-cal-grid .calendar-day.hm-mid { background: #bbdefb !important; color: #000 !important; }
+      .fb-year-cal-grid .calendar-day.hm-low { background: #bbdefb !important; color: #000 !important; }
+      .fb-year-cal-grid .calendar-day.hm-mid { background: #90caf9 !important; color: #000 !important; }
       .fb-year-cal-grid .calendar-day.hm-high { background: #ffcdd2 !important; color: #000 !important; }
       .fb-year-cal-grid .calendar-day.hm-empty { background: #eeeeee !important; color: #000 !important; }
       .hm-legend-green { background: #c8e6c9; color: #000; }
-      .hm-legend-blue { background: #bbdefb; color: #000; }
+      .hm-legend-blue { background: #90caf9; color: #000; }
       .hm-legend-red { background: #ffcdd2; color: #000; }
       .hm-legend-empty { background: #eeeeee; color: #000; }
     </style>

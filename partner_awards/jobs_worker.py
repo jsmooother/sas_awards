@@ -63,20 +63,17 @@ def _route_run_recently(conn: sqlite3.Connection, origin: str, dest: str, month:
 
 
 def create_open_dates_tasks(conn: sqlite3.Connection, job_id: int) -> int:
-    """Expand job into tasks. Returns total task count. When include_returns=1, also queue return (dest, origin)."""
+    """Expand job into tasks. Returns total task count. Always queues both outbound and return leg per route."""
     cur = conn.execute(
-        """SELECT origin, destination, COALESCE(include_returns, 0)
-           FROM partner_award_watch_routes WHERE program='flyingblue' AND enabled=1"""
+        """SELECT origin, destination FROM partner_award_watch_routes WHERE program='flyingblue' AND enabled=1"""
     )
     rows = cur.fetchall()
     months = _next_12_months()
     cabins = ["BUSINESS", "PREMIUM"]
     count = 0
     seen = set()  # (origin, dest, month, cabin) to avoid duplicate tasks
-    for (origin, dest, include_returns) in rows:
-        legs = [(origin, dest)]
-        if include_returns:
-            legs.append((dest, origin))
+    for (origin, dest) in rows:
+        legs = [(origin, dest), (dest, origin)]
         for (o, d) in legs:
             for cabin in cabins:
                 for month in months:
@@ -231,6 +228,10 @@ def process_job(conn: sqlite3.Connection, job: tuple) -> None:
         if ok and out_folder and Path(out_folder).exists():
             imp_ok, imp_err = run_import(out_folder)
             if imp_ok:
+                # Import return leg if runner wrote it (ByResourceId) to dest-origin/month
+                return_folder = Path(out_folder).parent.parent / f"{dest}-{origin}" / month
+                if return_folder.exists():
+                    run_import(str(return_folder))
                 conn.execute(
                     "UPDATE partner_award_job_tasks SET status='done', finished_at=datetime('now'), output_folder=? WHERE id=?",
                     (out_folder, task_id),

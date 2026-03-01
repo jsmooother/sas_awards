@@ -435,9 +435,11 @@ def _parse_lowest_fare_entries(
         if not isinstance(v, dict):
             return None
         t = v.get("tax")
-        if t is not None:
+        if isinstance(t, (int, float)):
+            return float(t)
+        if isinstance(t, dict) and t.get("amount") is not None:
             try:
-                return float(t)
+                return float(t["amount"])
             except (TypeError, ValueError):
                 pass
         return None
@@ -477,25 +479,34 @@ def _parse_lowest_fare_entries(
                 if cab not in cabin_list:
                     cab = cabin_list[0]
                 entries.append((date_str, cab, miles, tax))
-        # lowestOffers format (array of {flightDate, displayPrice, totalTaxDetails, ...})
+        # lowestOffers format (array of {flightDate, displayPrice, connections: [{price, tax}, ...], ...})
+        # KLM calendar shows "lowest for 1 passenger on a departing flight" = outbound only.
+        # Prefer first connection (outbound) when present; else displayPrice/totalPrice.
         for item in (node.get("lowestOffers") or []):
             if not isinstance(item, dict):
                 continue
             dt = item.get("flightDate")
-            miles = _miles_from(item)
+            conns = item.get("connections") or []
+            miles = None
+            tax = None
+            if conns and isinstance(conns[0], dict):
+                first = conns[0]
+                miles = _miles_from(first)
+                tax = _tax_from(first)
             if miles is None:
-                miles = item.get("displayPrice") or item.get("totalPrice")
+                miles = _miles_from(item) or item.get("displayPrice") or item.get("totalPrice")
+            if tax is None:
+                tax = _tax_from(item)
+            if tax is None and isinstance(item.get("totalTaxDetails"), dict):
+                tax = item["totalTaxDetails"].get("totalPrice")
+            if tax is None and isinstance(item.get("splitTaxDetails"), dict):
+                tax = item["splitTaxDetails"].get("totalPrice")
             if dt and miles is not None:
                 date_str = str(dt)[:10]
                 try:
                     datetime.strptime(date_str, "%Y-%m-%d")
                 except ValueError:
                     continue
-                tax = _tax_from(item)
-                if tax is None and isinstance(item.get("totalTaxDetails"), dict):
-                    tax = item["totalTaxDetails"].get("totalPrice")
-                if tax is None and isinstance(item.get("splitTaxDetails"), dict):
-                    tax = item["splitTaxDetails"].get("totalPrice")
                 for cab in cabin_list:
                     entries.append((date_str, cab, int(miles), float(tax) if tax is not None else None))
 

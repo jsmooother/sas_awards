@@ -31,7 +31,7 @@
             <td>{{ j.created_at }}</td>
             <td>
               {% set p = j.progress %}
-              {{ p.done_tasks or 0 }}/{{ p.total_tasks or 0 }}{% if p.skipped_tasks %} · {{ p.skipped_tasks }} skipped{% endif %}
+              {{ p.done_tasks or 0 }}/{{ p.total_tasks or 0 }}
               {% if p.current_task %} · {{ p.current_task }}{% endif %}
             </td>
             <td><a href="/partner-awards/jobs/{{ j.id }}">Detail</a></td>
