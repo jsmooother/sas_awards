@@ -164,10 +164,9 @@ def process_job(conn: sqlite3.Connection, job: tuple) -> None:
             (task_id,),
         )
         conn.execute(
-            "UPDATE partner_award_jobs SET progress_json=?, current_task=? WHERE id=?",
+            "UPDATE partner_award_jobs SET progress_json=? WHERE id=?",
             (
-                json.dumps({"total_tasks": total, "done_tasks": done, "current_task": f"{origin}-{dest} {month} {cabin}"}),
-                f"{origin}→{dest} {month} {cabin}",
+                json.dumps({"total_tasks": total, "done_tasks": done, "current_task": f"{origin}→{dest} {month} {cabin}"}),
                 job_id,
             ),
         )
