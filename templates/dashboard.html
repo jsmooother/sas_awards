@@ -1,0 +1,316 @@
+{% extends "base.html" %}
+{% block title %}Dashboard – SAS Awards{% endblock %}
+{% block content %}
+<style>
+  .dash-layout{display:grid;grid-template-columns:280px 1fr;gap:1.5rem;align-items:start}
+  @media(max-width:900px){.dash-layout{grid-template-columns:1fr}}
+  .filter-panel .card{position:sticky;top:1rem}
+  .step-title{font-size:.8rem;font-weight:600;color:#1d1d1f;margin-bottom:.5rem}
+  .step-section{padding-bottom:.85rem;margin-bottom:.85rem;border-bottom:1px solid rgba(0,0,0,.06)}
+  .step-section:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
+
+  /* Mode toggle */
+  .mode-toggle{display:flex;background:rgba(0,0,0,.04);border-radius:10px;padding:3px;margin-bottom:.85rem}
+  .mode-btn{flex:1;padding:.5rem .4rem;border-radius:8px;border:none;background:transparent;cursor:pointer;font-size:.8rem;font-weight:600;color:#515154;transition:all .2s;text-align:center}
+  .mode-btn.active{background:#fff;color:#007aff;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+
+  .region-grid{display:grid;grid-template-columns:1fr 1fr;gap:.35rem}
+  .region-btn{display:flex;flex-direction:column;align-items:center;gap:.1rem;padding:.45rem .2rem;border-radius:10px;border:2px solid rgba(0,0,0,.08);background:#fff;cursor:pointer;text-decoration:none;color:#1d1d1f;font-size:.72rem;font-weight:500;transition:all .15s;text-align:center}
+  .region-btn:hover{border-color:rgba(0,122,255,.3);background:#f0f7ff}
+  .region-btn.active{border-color:#007aff;background:#e8f4ff;color:#007aff}
+  .region-btn .ri{font-size:1.2rem}.region-btn .rc{font-size:.58rem;color:#86868b;font-weight:400}
+  .cabin-pills{display:flex;gap:.3rem;flex-wrap:wrap}
+  .cabin-pill{padding:.35rem .7rem;border-radius:8px;border:1.5px solid rgba(0,0,0,.1);background:#fff;cursor:pointer;text-decoration:none;color:#515154;font-size:.78rem;font-weight:500;transition:all .15s}
+  .cabin-pill:hover{border-color:rgba(0,122,255,.3)}.cabin-pill.active{border-color:#007aff;background:#e8f4ff;color:#007aff}
+  .ff{display:flex;flex-direction:column;gap:.45rem;margin-top:.4rem}
+  .ff label{font-size:.68rem;font-weight:500;color:#86868b;display:flex;flex-direction:column;gap:.15rem}
+  .ff input,.ff select{padding:.38rem .55rem;font-size:.84rem;border-radius:8px;border:1px solid rgba(0,0,0,.12);background:#fff;width:100%}
+  .ff input:focus,.ff select:focus{outline:none;border-color:#007aff;box-shadow:0 0 0 2px rgba(0,122,255,.15)}
+  .go-btn{margin-top:.35rem;padding:.55rem;border-radius:10px;border:none;background:#007aff;color:#fff;font-size:.88rem;font-weight:600;cursor:pointer;width:100%;transition:background .15s}
+  .go-btn:hover{background:#0051d5}
+
+  /* Result rows */
+  .rr{display:grid;grid-template-columns:auto 1fr auto auto;gap:.6rem .85rem;align-items:center;padding:.75rem .85rem;border-bottom:1px solid rgba(0,0,0,.05);transition:background .1s;cursor:pointer}
+  .rr:last-child{border-bottom:none}.rr:hover{background:rgba(0,122,255,.04)}
+  .rr-origin{font-size:.68rem;font-weight:600;color:#86868b;letter-spacing:.03em}
+  .rr-city{font-size:.92rem;font-weight:600;color:#1d1d1f}
+  .rr-sub{font-size:.72rem;color:#86868b}
+  .rr-date{font-size:.82rem;font-weight:500;color:#515154;text-align:right;white-space:nowrap}
+  .sb{padding:.18rem .45rem;border-radius:6px;font-size:.68rem;font-weight:600;white-space:nowrap;line-height:1.3}
+  .sb-j{background:#fef3c7;color:#92400e}.sb-p{background:#dbeafe;color:#1e40af}.sb-y{background:#d1fae5;color:#065f46}
+  .seats-wrap{display:flex;gap:.3rem;flex-wrap:nowrap}
+
+  /* Weekend pair row */
+  .wpr{padding:.75rem .85rem;border-bottom:1px solid rgba(0,0,0,.05);cursor:pointer;transition:background .1s}
+  .wpr:last-child{border-bottom:none}.wpr:hover{background:rgba(0,122,255,.04)}
+  .wpr-top{display:flex;align-items:baseline;gap:.6rem;margin-bottom:.3rem}
+  .wpr-city{font-size:.92rem;font-weight:600;color:#1d1d1f}
+  .wpr-code{font-size:.78rem;color:#86868b;font-weight:400}
+  .wpr-origin{font-size:.68rem;font-weight:600;color:#86868b;letter-spacing:.03em}
+  .wpr-country{font-size:.72rem;color:#86868b;margin-left:auto}
+  .wpr-legs{display:flex;gap:1.25rem;align-items:center;flex-wrap:wrap}
+  .wpr-leg{display:flex;flex-direction:column;gap:.08rem}
+  .wpr-leg-label{font-size:.6rem;font-weight:600;text-transform:uppercase;color:#86868b;letter-spacing:.04em}
+  .wpr-leg-date{font-size:.82rem;font-weight:500;color:#1d1d1f}
+  .wpr-arrow{color:#86868b;font-size:.85rem}
+  .wpr-seats{margin-left:auto;display:flex;gap:.25rem;flex-wrap:wrap}
+  .wpr-seats-group{display:flex;flex-direction:column;gap:.15rem;align-items:flex-end}
+  .wpr-seats-label{font-size:.55rem;color:#86868b;text-transform:uppercase;letter-spacing:.03em}
+
+  .pag{display:flex;justify-content:center;gap:.5rem;margin-top:.85rem}
+  .pag a{padding:.35rem .75rem;border-radius:8px;border:1px solid rgba(0,0,0,.1);color:#007aff;font-size:.82rem;font-weight:500;text-decoration:none}
+  .pag a:hover{background:#e8f4ff}
+  .empty-state{text-align:center;padding:2.5rem 1.25rem;color:#86868b}
+  .empty-state .ei{font-size:2.2rem;margin-bottom:.6rem}
+  .empty-state .et{font-size:1rem;font-weight:600;color:#1d1d1f;margin-bottom:.25rem}
+  .detail-legs{display:flex;gap:1rem;margin-bottom:1rem;flex-wrap:wrap}
+  .detail-leg{flex:1;min-width:150px;padding:1rem;background:rgba(0,0,0,.03);border-radius:10px}
+  .dl-t{font-size:.65rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#86868b;margin-bottom:.4rem}
+  .dl-d{font-size:1rem;font-weight:600;margin-bottom:.12rem}
+  .dl-w{font-size:.78rem;color:#86868b;margin-bottom:.45rem}
+  .dl-s{font-size:.82rem;color:#515154;line-height:1.6}.dl-s strong{color:#1d1d1f}
+  .book-btn{display:block;width:100%;padding:.8rem;text-align:center;background:#000080;color:#fff;border:none;border-radius:10px;font-size:.95rem;font-weight:600;cursor:pointer;text-decoration:none;transition:background .2s;margin-top:.5rem}
+  .book-btn:hover{background:#000066}
+  .copy-row{display:flex;align-items:center;justify-content:space-between;padding:.45rem .65rem;background:rgba(0,0,0,.03);border-radius:8px;font-size:.78rem;color:#515154;margin-bottom:.7rem}
+  .copy-btn{padding:.2rem .5rem;border-radius:6px;border:1px solid rgba(0,0,0,.12);background:#fff;font-size:.72rem;cursor:pointer;color:#007aff;font-weight:500}
+</style>
+
+<div class="page-header"><h1 class="page-title">Dashboard</h1></div>
+
+{# Stats #}
+<div class="card" style="margin-bottom:1.5rem"><div class="card-inner">
+  <div class="stat-row">
+    {% for o,c in stats.counts.items() %}<div class="stat-item"><div class="stat-label">{{ o }}</div><div class="stat-value">{{ c }}</div><div class="stat-sublabel">flight-dates</div></div>{% endfor %}
+    <div class="stat-item stat-item-total"><div class="stat-label">Total</div><div class="stat-value">{{ stats.total }}</div><div class="stat-sublabel">flight-dates</div></div>
+  </div>
+</div></div>
+
+<div class="dash-layout">
+  {# ═══ LEFT: filters ═══ #}
+  <div class="filter-panel"><div class="card"><div class="card-inner" style="padding:1.1rem">
+    <form id="f" method="get" action="/">
+      {# Mode toggle #}
+      <input type="hidden" name="mode" id="mi" value="{{ filters.mode }}">
+      <div class="mode-toggle">
+        <button type="button" class="mode-btn {% if filters.mode != 'weekend' %}active{% endif %}" onclick="sm('flights')">Flights</button>
+        <button type="button" class="mode-btn {% if filters.mode == 'weekend' %}active{% endif %}" onclick="sm('weekend')">Weekend Trips</button>
+      </div>
+
+      {# Region #}
+      <div class="step-section">
+        <div class="step-title">Region</div>
+        <input type="hidden" name="region" id="ri" value="{{ filters.region }}">
+        <div class="region-grid">
+          {% for r in regions %}
+          <div class="region-btn {% if filters.region == r.key %}active{% endif %}" data-r="{{ r.key }}" onclick="sr('{{ r.key }}')">
+            <span class="ri">{{ r.icon }}</span><span>{{ r.label }}</span><span class="rc">{{ r.destinations }} dest</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      {# Cabin (changes based on mode) #}
+      <div class="step-section">
+        <div class="step-title">Class</div>
+        <input type="hidden" name="cabin" id="ci" value="{{ filters.cabin }}">
+        <div class="cabin-pills" id="cabin-pills">
+          {% if filters.mode == 'weekend' %}
+            {% for k,l in [("all","All"),("business_plus","Business & Plus"),("business","Business Only")] %}
+            <div class="cabin-pill {% if filters.cabin==k %}active{% endif %}" data-c="{{ k }}" onclick="sc('{{ k }}')">{{ l }}</div>
+            {% endfor %}
+          {% else %}
+            {% for k,l in [("all","All"),("business","Business"),("plus","Plus"),("economy","Economy")] %}
+            <div class="cabin-pill {% if filters.cabin==k %}active{% endif %}" data-c="{{ k }}" onclick="sc('{{ k }}')">{{ l }}</div>
+            {% endfor %}
+          {% endif %}
+        </div>
+
+        <div class="ff">
+          <label>City / code<input type="text" name="city" value="{{ filters.city }}" placeholder="e.g. Barcelona, BCN"></label>
+          <label>Origin<select name="origin"><option value="">All</option><option value="ARN" {% if filters.origin=='ARN' %}selected{% endif %}>ARN</option><option value="CPH" {% if filters.origin=='CPH' %}selected{% endif %}>CPH</option></select></label>
+          <label>Min seats<input type="number" name="min_seats" min="1" value="{{ filters.min_seats }}"></label>
+          {% if filters.mode != 'weekend' %}
+          <div style="display:flex;gap:.4rem">
+            <label style="flex:1">From<input type="date" name="from" value="{{ filters['from'] }}"></label>
+            <label style="flex:1">To<input type="date" name="to" value="{{ filters['to'] }}"></label>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      <button type="submit" class="go-btn">Search</button>
+    </form>
+  </div></div></div>
+
+  {# ═══ RIGHT: results ═══ #}
+  <div>
+    {% if results and results.rows %}
+    <div class="card"><div class="card-inner">
+
+      {# Header #}
+      {% set cabin_label = {"all":"All","business":"Business","business_plus":"Biz & Plus","plus":"Plus","economy":"Economy"} %}
+      <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:.4rem;margin-bottom:.6rem">
+        <span style="font-size:1.05rem;font-weight:600;color:#1d1d1f">
+          {% if filters.mode == 'weekend' %}Weekend Pairs{% else %}Flights{% endif %}
+          {% if filters.region %} – {{ regions|selectattr('key','equalto',filters.region)|map(attribute='label')|first }}{% endif %}
+          {% if filters.city %} – "{{ filters.city }}"{% endif %}
+          · {{ cabin_label.get(filters.cabin, filters.cabin) }}
+        </span>
+        <span style="font-size:.78rem;color:#86868b">{{ results.total }} {% if filters.mode=='weekend' %}pairs{% else %}flights{% endif %} · Page {{ results.page }}/{{ ((results.total-1)//results.per_page)+1 }}</span>
+      </div>
+
+      {# ── Weekend pair rows ── #}
+      {% if filters.mode == 'weekend' %}
+        {% for row in results.rows %}
+        <div class="wpr" onclick="owp('{{ row.origin }}','{{ row.airport_code }}','{{ row.outbound }}','{{ row.inbound }}')">
+          <div class="wpr-top">
+            <span class="wpr-origin">{{ row.origin }}</span>
+            <span class="wpr-city">{{ row.city_name }}</span>
+            <span class="wpr-code">{{ row.airport_code }}</span>
+            <span class="wpr-country">{{ row.country_name }}</span>
+          </div>
+          <div class="wpr-legs">
+            <div class="wpr-leg">
+              <span class="wpr-leg-label">Out</span>
+              <span class="wpr-leg-date">{{ row.outbound }}</span>
+            </div>
+            <span class="wpr-arrow">→</span>
+            <div class="wpr-leg">
+              <span class="wpr-leg-label">Return</span>
+              <span class="wpr-leg-date">{{ row.inbound }}</span>
+            </div>
+            <div class="wpr-seats">
+              <div class="wpr-seats-group">
+                <span class="wpr-seats-label">Out</span>
+                <div class="seats-wrap">
+                  {% if row.ab_out > 0 %}<span class="sb sb-j">J{{ row.ab_out }}</span>{% endif %}
+                  {% if row.ap_out > 0 %}<span class="sb sb-p">+{{ row.ap_out }}</span>{% endif %}
+                  {% if row.ag_out > 0 %}<span class="sb sb-y">Y{{ row.ag_out }}</span>{% endif %}
+                </div>
+              </div>
+              <div class="wpr-seats-group">
+                <span class="wpr-seats-label">Return</span>
+                <div class="seats-wrap">
+                  {% if row.ab_in > 0 %}<span class="sb sb-j">J{{ row.ab_in }}</span>{% endif %}
+                  {% if row.ap_in > 0 %}<span class="sb sb-p">+{{ row.ap_in }}</span>{% endif %}
+                  {% if row.ag_in > 0 %}<span class="sb sb-y">Y{{ row.ag_in }}</span>{% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+
+      {# ── Regular flight rows ── #}
+      {% else %}
+        {% for row in results.rows %}
+        <div class="rr" onclick="od('{{ row.origin }}','{{ row.airport_code }}','{{ row.date }}')">
+          <div class="rr-origin">{{ row.origin }}</div>
+          <div><div class="rr-city">{{ row.city_name }} <span style="color:#86868b;font-weight:400;font-size:.78rem">{{ row.airport_code }}</span></div><div class="rr-sub">{{ row.country_name }} · {{ row.direction }}</div></div>
+          <div class="rr-date">{{ row.date }}</div>
+          <div class="seats-wrap">
+            {% if row.ab > 0 %}<span class="sb sb-j">J{{ row.ab }}</span>{% endif %}
+            {% if row.ap > 0 %}<span class="sb sb-p">+{{ row.ap }}</span>{% endif %}
+            {% if row.ag > 0 %}<span class="sb sb-y">Y{{ row.ag }}</span>{% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      {% endif %}
+
+      {# Pagination #}
+      {% set tp = ((results.total-1)//results.per_page)+1 %}
+      {% if tp > 1 %}
+      <div class="pag">
+        {% if results.page > 1 %}<a href="/?mode={{ filters.mode }}&region={{ filters.region }}&cabin={{ filters.cabin }}&origin={{ filters.origin }}&city={{ filters.city }}&min_seats={{ filters.min_seats }}&from={{ filters['from'] }}&to={{ filters['to'] }}&page={{ results.page-1 }}">← Prev</a>{% endif %}
+        <span style="padding:.35rem 0;font-size:.82rem;color:#86868b">{{ results.page }}/{{ tp }}</span>
+        {% if results.page < tp %}<a href="/?mode={{ filters.mode }}&region={{ filters.region }}&cabin={{ filters.cabin }}&origin={{ filters.origin }}&city={{ filters.city }}&min_seats={{ filters.min_seats }}&from={{ filters['from'] }}&to={{ filters['to'] }}&page={{ results.page+1 }}">Next →</a>{% endif %}
+      </div>
+      {% endif %}
+    </div></div>
+
+    {% else %}
+    <div class="card"><div class="card-inner">
+      <div class="empty-state">
+        <div class="ei">{% if filters.mode == 'weekend' %}🗓{% else %}✈️{% endif %}</div>
+        <div class="et">{% if filters.region or filters.city %}No {% if filters.mode=='weekend' %}weekend pairs{% else %}flights{% endif %} found{% else %}Find EuroBonus awards{% endif %}</div>
+        <p style="color:#86868b;font-size:.88rem">{% if filters.region or filters.city %}Try widening your filters.{% else %}Choose a region or city, then search. Toggle to <strong>Weekend Trips</strong> to find round-trip pairs.{% endif %}</p>
+      </div>
+    </div></div>
+    {% endif %}
+  </div>
+</div>
+
+{# ── Detail modal ── #}
+<div id="dm" class="modal-overlay" role="dialog" aria-modal="true" hidden>
+  <div class="modal-backdrop"></div>
+  <div class="modal-content" style="max-width:460px">
+    <div class="modal-header"><h2 class="modal-title" id="dt">Details</h2><button type="button" class="modal-close" aria-label="Close">&times;</button></div>
+    <div class="modal-body" id="db"><div style="text-align:center;padding:2rem;color:#86868b">Loading…</div></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var DN=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+  /* Mode toggle */
+  window.sm=function(mode){
+    document.getElementById('mi').value=mode;
+    document.querySelectorAll('.mode-btn').forEach(function(b,i){b.classList.toggle('active',i===(mode==='flights'?0:1))});
+    var ci=document.getElementById('ci');
+    if(mode==='weekend'&&(ci.value==='plus'||ci.value==='economy'))ci.value='all';
+    if(mode==='flights'&&ci.value==='business_plus')ci.value='all';
+  };
+  window.sr=function(k){document.getElementById('ri').value=k;document.querySelectorAll('.region-btn').forEach(function(b){b.classList.toggle('active',b.dataset.r===k)})};
+  window.sc=function(k){document.getElementById('ci').value=k;document.querySelectorAll('.cabin-pill').forEach(function(p){p.classList.toggle('active',p.dataset.c===k)})};
+
+  /* Modal */
+  var m=document.getElementById('dm'),mb=document.getElementById('db'),mt=document.getElementById('dt');
+  function cm(){m.setAttribute('hidden','')}
+  m.querySelector('.modal-close').addEventListener('click',cm);
+  m.querySelector('.modal-backdrop').addEventListener('click',cm);
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')cm()});
+
+  function renderLegs(legs,bookUrl,city,dest){
+    var h='<div class="detail-legs">';
+    ['outbound','inbound'].forEach(function(dir){var l=legs[dir];if(!l)return;
+      h+='<div class="detail-leg"><div class="dl-t">'+dir+'</div><div class="dl-d">'+l.date+'</div><div class="dl-w">'+DN[new Date(l.date+'T00:00:00').getDay()]+'</div><div class="dl-s">'
+      +(l.ab>0?'<div>Business: <strong>'+l.ab+'</strong></div>':'')
+      +(l.ap>0?'<div>Plus: <strong>'+l.ap+'</strong></div>':'')
+      +(l.ag>0?'<div>Economy: <strong>'+l.ag+'</strong></div>':'')
+      +'</div></div>'});
+    h+='</div><a class="book-btn" href="'+bookUrl+'" target="_blank" rel="noopener">Book on SAS ↗</a>';
+    return h;
+  }
+
+  /* Single flight detail */
+  window.od=function(o,d,dt){
+    m.removeAttribute('hidden');mb.innerHTML='<div style="text-align:center;padding:2rem;color:#86868b">Loading…</div>';
+    fetch('/api/detail?origin='+encodeURIComponent(o)+'&dest='+encodeURIComponent(d)+'&date='+encodeURIComponent(dt))
+    .then(function(r){return r.json()}).then(function(data){
+      if(data.error){mb.innerHTML='<p style="color:#c00">'+data.error+'</p>';return}
+      var fl=data.legs.outbound||data.legs.inbound||{},city=fl.city_name||d;
+      mt.textContent=city+' ('+d+')';
+      var ct=o+' → '+d+' · '+dt;
+      mb.innerHTML='<div class="copy-row"><span>'+ct+'</span><button class="copy-btn" onclick="navigator.clipboard.writeText(\''+ct+'\');this.textContent=\'Copied!\'">Copy</button></div>'
+        +renderLegs(data.legs,data.booking_url,city,d);
+    }).catch(function(){mb.innerHTML='<p style="color:#c00">Failed to load.</p>'});
+  };
+
+  /* Weekend pair detail */
+  window.owp=function(o,d,outDt,inDt){
+    m.removeAttribute('hidden');mb.innerHTML='<div style="text-align:center;padding:2rem;color:#86868b">Loading…</div>';
+    fetch('/api/weekend-pair-detail?origin='+encodeURIComponent(o)+'&dest='+encodeURIComponent(d)+'&outbound='+encodeURIComponent(outDt)+'&inbound='+encodeURIComponent(inDt))
+    .then(function(r){return r.json()}).then(function(data){
+      if(data.error){mb.innerHTML='<p style="color:#c00">'+data.error+'</p>';return}
+      var fl=data.outbound||data.inbound||{},city=fl.city_name||d;
+      mt.textContent=city+' ('+d+') – Weekend';
+      var days=Math.round((new Date(inDt+'T00:00:00')-new Date(outDt+'T00:00:00'))/86400000);
+      var ct=o+' → '+d+' · '+outDt+' → '+inDt+' ('+days+'d)';
+      mb.innerHTML='<div class="copy-row"><span>'+ct+'</span><button class="copy-btn" onclick="navigator.clipboard.writeText(\''+ct+'\');this.textContent=\'Copied!\'">Copy</button></div>'
+        +'<p style="font-size:.85rem;color:#86868b;margin:0 0 .75rem">'+days+'-day trip · '+o+' → '+city+' → '+o+'</p>'
+        +renderLegs({outbound:data.outbound,inbound:data.inbound},data.booking_url,city,d);
+    }).catch(function(){mb.innerHTML='<p style="color:#c00">Failed to load.</p>'});
+  };
+})();
+</script>
+{% endblock %}
