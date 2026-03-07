@@ -23,6 +23,7 @@ app = Flask(__name__)
 @app.route("/")
 def dashboard():
     args = request.args
+    mode = args.get("mode", "flights")
     region = args.get("region", "")
     cabin = args.get("cabin", "all")
     origin = args.get("origin", "")
@@ -36,17 +37,24 @@ def dashboard():
     region_defs = queries.region_counts()
 
     countries = _regions.region_countries(region) if region else None
-    results = queries.query_flights(
-        countries=countries, cabin=cabin, origin=origin,
-        min_seats=min_seats, from_date=from_date, to_date=to_date,
-        city=city, page=page, per_page=50,
-    )
+
+    if mode == "weekend":
+        results = queries.query_weekend_pairs(
+            countries=countries, cabin=cabin, origin=origin,
+            min_seats=min_seats, city=city, page=page, per_page=50,
+        )
+    else:
+        results = queries.query_flights(
+            countries=countries, cabin=cabin, origin=origin,
+            min_seats=min_seats, from_date=from_date, to_date=to_date,
+            city=city, page=page, per_page=50,
+        )
 
     return render_template(
         "dashboard.html",
         stats=stats, regions=region_defs, results=results,
         filters={
-            "region": region, "cabin": cabin, "origin": origin,
+            "mode": mode, "region": region, "cabin": cabin, "origin": origin,
             "city": city, "min_seats": min_seats,
             "from": from_date, "to": to_date, "page": page,
         },
@@ -123,6 +131,34 @@ def api_routes_proxy():
         return jsonify(r.json())
     except Exception as e:
         return jsonify({"_error": str(e)})
+
+
+@app.route("/api/weekend-pair-detail")
+def api_weekend_pair_detail():
+    """Full cabin breakdown for an outbound+inbound weekend pair."""
+    origin = request.args.get("origin", "")
+    dest = request.args.get("dest", "")
+    outbound = request.args.get("outbound", "")
+    inbound = request.args.get("inbound", "")
+    if not all([origin, dest, outbound, inbound]):
+        return jsonify({"error": "Missing origin, dest, outbound, or inbound"}), 400
+
+    out_detail = queries.route_detail(origin, dest, outbound)
+    in_detail = queries.route_detail(origin, dest, inbound)
+
+    out_leg = (out_detail or {}).get("outbound")
+    in_leg = (in_detail or {}).get("inbound")
+    if not out_leg and not in_leg:
+        return jsonify({"error": "Pair not found"}), 404
+
+    sas_url = (
+        f"https://www.sas.se/boka/flyg?from={origin}&to={dest}"
+        f"&outDate={outbound}&inDate={inbound}&adt=2&bookingType=R"
+    )
+    return jsonify({
+        "outbound": out_leg, "inbound": in_leg,
+        "booking_url": sas_url,
+    })
 
 
 @app.route("/api/flow/regions")

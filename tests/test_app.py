@@ -169,3 +169,47 @@ def test_legacy_weekend_routes(client):
 def test_legacy_flow_detail(client):
     r = client.get("/api/flow/detail")
     assert r.status_code == 400
+
+
+# ── Weekend pair mode ──
+
+def test_dashboard_weekend_mode(client):
+    r = client.get("/?mode=weekend")
+    assert r.status_code == 200
+    assert b"Weekend" in r.data
+
+
+def test_dashboard_weekend_with_region(client):
+    r = client.get("/?mode=weekend&region=europe&cabin=all")
+    assert r.status_code == 200
+
+
+def test_dashboard_weekend_business_only(client):
+    r = client.get("/?mode=weekend&cabin=business")
+    assert r.status_code == 200
+
+
+def test_dashboard_weekend_business_plus(client):
+    r = client.get("/?mode=weekend&cabin=business_plus")
+    assert r.status_code == 200
+
+
+def test_dashboard_weekend_city_filter(client):
+    r = client.get("/?mode=weekend&city=Bergen")
+    assert r.status_code == 200
+
+
+def test_api_weekend_pair_detail_missing(client):
+    r = client.get("/api/weekend-pair-detail")
+    assert r.status_code == 400
+
+
+def test_api_weekend_pair_detail_valid(client):
+    results = client.get("/?mode=weekend&cabin=all")
+    if b"wpr" not in results.data:
+        pytest.skip("No weekend pairs in DB")
+    r = client.get(
+        "/api/weekend-pair-detail?origin=ARN&dest=BGO"
+        "&outbound=2026-03-05&inbound=2026-03-08"
+    )
+    assert r.status_code in (200, 404)

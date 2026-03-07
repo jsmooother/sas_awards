@@ -123,6 +123,112 @@ def query_flights(
     return {"rows": rows, "total": total, "page": page, "per_page": per_page}
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Weekend pairs (outbound+inbound round-trip combos)
+# ═══════════════════════════════════════════════════════════════════════════
+
+def query_weekend_pairs(
+    countries=None, cabin="all", origin="", min_seats=MIN_SEATS,
+    city="", page=1, per_page=50,
+):
+    """
+    Weekend round-trip pairs: outbound Wed/Thu/Fri, inbound Sat/Sun/Mon, 3-4 days.
+    Cabin filter:
+      - "business"      → both legs must have ab >= min_seats
+      - "business_plus"  → both legs must have (ab >= min_seats OR ap >= min_seats)
+      - "all"            → both legs must have (ag >= min_seats OR ap >= min_seats OR ab >= min_seats)
+    Returns {"rows": [...], "total": int, "page": int, "per_page": int}.
+    """
+    seat_out, seat_in = _weekend_cabin_clause(cabin, min_seats)
+
+    conditions = [
+        "inb.direction = 'inbound'",
+        "outb.direction = 'outbound'",
+        seat_out,
+        seat_in,
+        "strftime('%w', inb.date) IN ('6','0','1')",
+        "strftime('%w', outb.date) IN ('3','4','5')",
+        f"(julianday(inb.date) - julianday(outb.date)) BETWEEN {TRIP_DAYS_MIN} AND {TRIP_DAYS_MAX}",
+        "date(inb.date) BETWEEN date('now') AND date('now','+1 year')",
+    ]
+    params = []
+
+    if countries:
+        ph = ",".join("?" * len(countries))
+        conditions.append(f"inb.country_name IN ({ph})")
+        params.extend(countries)
+    if origin:
+        conditions.append("inb.origin = ?")
+        params.append(origin)
+    if city:
+        conditions.append(
+            "(inb.city_name LIKE ? OR inb.airport_code LIKE ?)"
+        )
+        params.extend([f"%{city}%", f"%{city}%"])
+
+    where = " AND ".join(conditions)
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute(f"""
+        SELECT COUNT(*) FROM flights AS inb
+        JOIN flights AS outb
+          ON inb.airport_code = outb.airport_code AND inb.origin = outb.origin
+        WHERE {where}
+    """, params)
+    total = cur.fetchone()[0]
+
+    order = _weekend_order(cabin)
+    offset = (page - 1) * per_page
+    cur.execute(f"""
+        SELECT inb.origin, inb.city_name, inb.airport_code, inb.country_name,
+               outb.date AS outbound, inb.date AS inbound,
+               outb.ag AS ag_out, outb.ap AS ap_out, outb.ab AS ab_out,
+               inb.ag AS ag_in, inb.ap AS ap_in, inb.ab AS ab_in
+        FROM flights AS inb
+        JOIN flights AS outb
+          ON inb.airport_code = outb.airport_code AND inb.origin = outb.origin
+        WHERE {where}
+        ORDER BY {order}
+        LIMIT ? OFFSET ?
+    """, params + [per_page, offset])
+
+    rows = []
+    for r in cur.fetchall():
+        rows.append({
+            "origin": r[0], "city_name": r[1], "airport_code": r[2],
+            "country_name": r[3], "outbound": r[4], "inbound": r[5],
+            "ag_out": r[6], "ap_out": r[7], "ab_out": r[8],
+            "ag_in": r[9], "ap_in": r[10], "ab_in": r[11],
+        })
+    conn.close()
+    return {"rows": rows, "total": total, "page": page, "per_page": per_page}
+
+
+def _weekend_cabin_clause(cabin, min_seats):
+    """Return (outbound_condition, inbound_condition) for weekend pair cabin filter."""
+    if cabin == "business":
+        return (f"outb.ab >= {min_seats}", f"inb.ab >= {min_seats}")
+    if cabin == "business_plus":
+        return (
+            f"(outb.ab >= {min_seats} OR outb.ap >= {min_seats})",
+            f"(inb.ab >= {min_seats} OR inb.ap >= {min_seats})",
+        )
+    # "all" — any cabin
+    return (
+        f"(outb.ag >= {min_seats} OR outb.ap >= {min_seats} OR outb.ab >= {min_seats})",
+        f"(inb.ag >= {min_seats} OR inb.ap >= {min_seats} OR inb.ab >= {min_seats})",
+    )
+
+
+def _weekend_order(cabin):
+    if cabin == "business":
+        return "outb.ab + inb.ab DESC, outb.date, inb.city_name COLLATE NOCASE"
+    if cabin == "business_plus":
+        return "outb.ab + outb.ap + inb.ab + inb.ap DESC, outb.date, inb.city_name COLLATE NOCASE"
+    return "(outb.ab*3+outb.ap*2+outb.ag + inb.ab*3+inb.ap*2+inb.ag) DESC, outb.date, inb.city_name COLLATE NOCASE"
+
+
 def _cabin_clause(cabin, min_seats):
     if cabin == "business":
         return (f"ab >= {min_seats}",
