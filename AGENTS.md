@@ -14,11 +14,31 @@ SAS Awards is a Python toolset for tracking SAS EuroBonus award flight availabil
 | Data fetcher | `source venv/bin/activate && python update_sas_awards.py` | N/A | Populates `~/sas_awards/sas_awards.sqlite` from SAS API; takes ~3 minutes |
 | Telegram bot | `source venv/bin/activate && python weekend_bot.py` | N/A | Requires `TELEGRAM_BOT_TOKEN` in `.env`; optional |
 
+### Navigation (2-page architecture)
+
+The app has exactly 2 pages + API endpoints:
+
+| URL | Purpose |
+|---|---|
+| `GET /` | Dashboard — unified search with region/cabin/city filters, paginated results, detail modal |
+| `GET /reports` | Reports — 5 tabs (Region, City, Business, Weekend, New Today) with charts + tables |
+| `GET /api/detail` | Route detail JSON (origin, dest, date) |
+| `GET /api/routes` | SAS routes/v1 proxy (origin, dest, date) |
+
+Old URLs (`/all`, `/business`, `/plus`, `/weekend`, `/new`, `/search`, `/flow`, `/reports/*`) are 301 redirects.
+
+### Code structure
+
+- `app.py` — Flask routes only (~200 lines), no SQL
+- `queries.py` — All database queries as testable functions
+- `regions.py` — Country→region mapping (Swedish names from SAS API)
+- `report_config.py` — Shared constants (MIN_SEATS, TRIP_DAYS)
+- `tests/test_app.py` — 24 pytest tests (pages, APIs, redirects)
+
 ### Key caveats
 
-- The database lives at `~/sas_awards/sas_awards.sqlite` (not in the project directory). The directory must be created with `mkdir -p ~/sas_awards` before running anything.
-- The data fetcher (`update_sas_awards.py`) must be run at least once before the Flask dashboard will show meaningful data.
-- There are no automated tests or lint configuration in this project. Syntax checking can be done with `python -m py_compile <file>`.
-- `daily_business_by_date.py` and `daily_plus_europe.py` are actually bash scripts despite their `.py` extension.
-- The Telegram bot and morning report script are optional and require `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` secrets in `.env`.
-- Standard dev commands are documented in `README.md` under "Quick start".
+- The database lives at `~/sas_awards/sas_awards.sqlite`. Create with `mkdir -p ~/sas_awards`.
+- Run `update_sas_awards.py` at least once to populate data.
+- Tests: `python -m pytest tests/test_app.py -v`
+- `daily_business_by_date.py` and `daily_plus_europe.py` are bash scripts despite `.py` extension.
+- Telegram bot and morning report are optional (need `TELEGRAM_BOT_TOKEN` in `.env`).

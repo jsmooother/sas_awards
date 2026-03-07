@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% block title %}Reports – SAS Awards{% endblock %}
+{% block content %}
+<style>
+  .report-tabs{display:flex;gap:0;margin-bottom:1.5rem;background:rgba(0,0,0,.04);border-radius:10px;padding:4px;width:fit-content;flex-wrap:wrap}
+  .report-tabs a{padding:.5rem 1rem;font-size:.85rem;font-weight:500;color:#515154;text-decoration:none;border-radius:8px;transition:all .2s;white-space:nowrap}
+  .report-tabs a:hover{color:#1d1d1f}
+  .report-tabs a.active{background:#fff;color:#007aff;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  .report-filters{display:flex;gap:.75rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:1.25rem}
+  .report-filters label{display:flex;flex-direction:column;gap:.25rem;font-size:.72rem;font-weight:500;color:#86868b}
+  .report-filters select,.report-filters input{padding:.4rem .6rem;font-size:.88rem;border-radius:8px;border:1px solid rgba(0,0,0,.12);background:#fff;min-width:90px}
+  .report-filters select:focus,.report-filters input:focus{outline:none;border-color:#007aff;box-shadow:0 0 0 2px rgba(0,122,255,.15)}
+  .report-filters button{padding:.45rem 1rem;font-size:.88rem;font-weight:500;background:#007aff;color:#fff;border:none;border-radius:8px;cursor:pointer}
+  .report-filters button:hover{background:#0051d5}
+  .chart-wrap{position:relative;height:340px;margin-bottom:1rem}
+  .rtable{width:100%;border-collapse:collapse;font-size:.88rem}
+  .rtable th,.rtable td{padding:.7rem 1rem;text-align:left;border-bottom:1px solid rgba(0,0,0,.06)}
+  .rtable th{background:rgba(0,0,0,.02);font-weight:600;color:#515154;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em}
+  .rtable tbody tr:hover{background:rgba(0,0,0,.02)}
+  .rtable tbody tr:last-child td{border-bottom:none}
+  .report-msg{padding:1rem;background:#fff9e6;border-radius:10px;margin-bottom:1.25rem;color:#8b6914;font-size:.9rem;border:1px solid rgba(255,193,7,.3)}
+  .report-summary{display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem}
+  .report-summary .stat-item{min-width:100px}
+</style>
+
+<div class="page-header">
+  <h1 class="page-title">Reports</h1>
+</div>
+
+<div class="report-tabs">
+  <a href="/reports?tab=region" class="{% if tab=='region' %}active{% endif %}">Region</a>
+  <a href="/reports?tab=city" class="{% if tab=='city' %}active{% endif %}">City</a>
+  <a href="/reports?tab=business" class="{% if tab=='business' %}active{% endif %}">Business</a>
+  <a href="/reports?tab=weekend" class="{% if tab=='weekend' %}active{% endif %}">Weekend</a>
+  <a href="/reports?tab=new" class="{% if tab=='new' %}active{% endif %}">New Today</a>
+</div>
+
+{# ═══════════════════════════════════════════════════════════════════ #}
+{# TAB: REGION                                                       #}
+{# ═══════════════════════════════════════════════════════════════════ #}
+{% if tab == 'region' %}
+<div class="card"><div class="card-inner">
+  <form class="report-filters" method="get" action="/reports">
+    <input type="hidden" name="tab" value="region">
+    <label>Cabin<select name="cabin"><option value="all" {% if filters.cabin=='all' %}selected{% endif %}>All</option><option value="business" {% if filters.cabin=='business' %}selected{% endif %}>Business</option><option value="plus" {% if filters.cabin=='plus' %}selected{% endif %}>Plus</option><option value="economy" {% if filters.cabin=='economy' %}selected{% endif %}>Economy</option></select></label>
+    <label>Origin<select name="origin"><option value="">All</option><option value="ARN" {% if filters.origin=='ARN' %}selected{% endif %}>ARN</option><option value="CPH" {% if filters.origin=='CPH' %}selected{% endif %}>CPH</option></select></label>
+    <button type="submit">Apply</button>
+  </form>
+  {% if data and data.chart and data.chart.labels %}
+  <div class="chart-wrap"><canvas id="chart"></canvas></div>
+  {% endif %}
+</div></div>
+{% if data and data.table %}
+<div class="card"><div class="card-inner">
+  <h3 class="card-section-title">By Country <span class="count">({{ data.table|length }})</span></h3>
+  <div class="table-wrapper"><table class="rtable"><thead><tr><th>Region</th><th>Country</th><th>Dest</th><th>Flights</th><th>Biz</th><th>Plus</th><th>Eco</th></tr></thead><tbody>
+  {% for r in data.table %}<tr><td>{{ r.region }}</td><td>{{ r.country }}</td><td>{{ r.dests }}</td><td>{{ r.flights }}</td><td>{{ r.biz }}</td><td>{{ r.plus }}</td><td>{{ r.eco }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</div></div>
+{% endif %}
+
+{# ═══════════════════════════════════════════════════════════════════ #}
+{# TAB: CITY                                                         #}
+{# ═══════════════════════════════════════════════════════════════════ #}
+{% elif tab == 'city' %}
+<div class="card"><div class="card-inner">
+  <form class="report-filters" method="get" action="/reports">
+    <input type="hidden" name="tab" value="city">
+    <label>Cabin<select name="cabin"><option value="all" {% if filters.cabin=='all' %}selected{% endif %}>All</option><option value="business" {% if filters.cabin=='business' %}selected{% endif %}>Business</option><option value="plus" {% if filters.cabin=='plus' %}selected{% endif %}>Plus</option><option value="economy" {% if filters.cabin=='economy' %}selected{% endif %}>Economy</option></select></label>
+    <label>Origin<select name="origin"><option value="">All</option><option value="ARN" {% if filters.origin=='ARN' %}selected{% endif %}>ARN</option><option value="CPH" {% if filters.origin=='CPH' %}selected{% endif %}>CPH</option></select></label>
+    <button type="submit">Apply</button>
+  </form>
+  {% if data and data.chart and data.chart.labels %}
+  <div class="chart-wrap"><canvas id="chart"></canvas></div>
+  {% endif %}
+</div></div>
+{% if data and data.table %}
+<div class="card"><div class="card-inner">
+  <h3 class="card-section-title">Top Destinations <span class="count">({{ data.table|length }})</span></h3>
+  <div class="table-wrapper"><table class="rtable"><thead><tr><th>City</th><th>Code</th><th>Country</th><th>Flights</th><th>Biz</th><th>Plus</th><th>Eco</th></tr></thead><tbody>
+  {% for r in data.table %}<tr><td>{{ r.city }}</td><td>{{ r.code }}</td><td>{{ r.country }}</td><td>{{ r.flights }}</td><td>{{ r.biz }}</td><td>{{ r.plus }}</td><td>{{ r.eco }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</div></div>
+{% endif %}
+
+{# ═══════════════════════════════════════════════════════════════════ #}
+{# TAB: BUSINESS                                                     #}
+{# ═══════════════════════════════════════════════════════════════════ #}
+{% elif tab == 'business' %}
+<div class="card"><div class="card-inner">
+  <form class="report-filters" method="get" action="/reports">
+    <input type="hidden" name="tab" value="business">
+    <label>Origin<select name="origin"><option value="">All</option><option value="ARN" {% if filters.origin=='ARN' %}selected{% endif %}>ARN</option><option value="CPH" {% if filters.origin=='CPH' %}selected{% endif %}>CPH</option></select></label>
+    <button type="submit">Apply</button>
+  </form>
+  {% if data and data.chart and data.chart.labels %}
+  <div class="chart-wrap"><canvas id="chart"></canvas></div>
+  {% endif %}
+</div></div>
+{% if data and data.table %}
+<div class="card"><div class="card-inner">
+  <h3 class="card-section-title">Business Flights <span class="count">({{ data.table|length }})</span></h3>
+  <div class="table-wrapper"><table class="rtable"><thead><tr><th>Origin</th><th>City</th><th>Code</th><th>Date</th><th>Business</th></tr></thead><tbody>
+  {% for r in data.table %}<tr><td>{{ r.origin }}</td><td>{{ r.city }}</td><td>{{ r.code }}</td><td>{{ r.date }}</td><td>{{ r.ab }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</div></div>
+{% endif %}
+
+{# ═══════════════════════════════════════════════════════════════════ #}
+{# TAB: WEEKEND                                                      #}
+{# ═══════════════════════════════════════════════════════════════════ #}
+{% elif tab == 'weekend' %}
+<div class="card"><div class="card-inner">
+  <form class="report-filters" method="get" action="/reports">
+    <input type="hidden" name="tab" value="weekend">
+    <label>Origin<select name="origin"><option value="">All</option><option value="ARN" {% if filters.origin=='ARN' %}selected{% endif %}>ARN</option><option value="CPH" {% if filters.origin=='CPH' %}selected{% endif %}>CPH</option></select></label>
+    <button type="submit">Apply</button>
+  </form>
+  {% if data and data.summary %}
+  <div class="report-summary">
+    {% for o, s in data.summary.items() %}
+    <div class="stat-item"><div class="stat-label">{{ o }}</div><div class="stat-value">{{ s.cities }}</div><div class="stat-sublabel">cities · {{ s.pairs }} pairs</div></div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if data and data.chart and data.chart.labels %}
+  <div class="chart-wrap"><canvas id="chart"></canvas></div>
+  {% endif %}
+</div></div>
+{% if data and data.table %}
+<div class="card"><div class="card-inner">
+  <h3 class="card-section-title">All Cities <span class="count">({{ data.table|length }})</span></h3>
+  <div class="table-wrapper"><table class="rtable"><thead><tr><th>Origin</th><th>City</th><th>Code</th><th>Pairs</th><th>Earliest</th><th>Latest</th></tr></thead><tbody>
+  {% for r in data.table %}<tr><td>{{ r.origin }}</td><td>{{ r.city }}</td><td>{{ r.code }}</td><td>{{ r.pairs }}</td><td>{{ r.earliest }}</td><td>{{ r.latest }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</div></div>
+{% endif %}
+
+{# ═══════════════════════════════════════════════════════════════════ #}
+{# TAB: NEW TODAY                                                     #}
+{# ═══════════════════════════════════════════════════════════════════ #}
+{% elif tab == 'new' %}
+{% if data is none %}
+<div class="report-msg">No flight history yet. Run <code>update_sas_awards.py</code> at least twice on different days.</div>
+{% elif data %}
+<div class="card"><div class="card-inner">
+  <p style="font-size:.88rem;color:#86868b;margin:0 0 1rem">New business flights: {{ data.prev }} → {{ data.latest }}</p>
+  {% if data.chart and data.chart.labels %}
+  <div class="chart-wrap"><canvas id="chart"></canvas></div>
+  {% endif %}
+</div></div>
+{% if data.table %}
+<div class="card"><div class="card-inner">
+  <h3 class="card-section-title">New Flights <span class="count">({{ data.table|length }})</span></h3>
+  <div class="table-wrapper"><table class="rtable"><thead><tr><th>Origin</th><th>City</th><th>Code</th><th>Date</th><th>Dir</th><th>Biz</th></tr></thead><tbody>
+  {% for r in data.table %}<tr><td>{{ r.origin }}</td><td>{{ r.city }}</td><td>{{ r.code }}</td><td>{{ r.date }}</td><td>{{ r.direction }}</td><td>{{ r.ab }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</div></div>
+{% endif %}
+{% endif %}
+{% endif %}
+
+{# ═══════════════════════════════════════════════════════════════════ #}
+{# Chart.js rendering                                                 #}
+{# ═══════════════════════════════════════════════════════════════════ #}
+{% if data and data is mapping and data.chart is defined and data.chart and data.chart.labels %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+(function(){
+  var C=['rgba(0,122,255,.7)','rgba(255,149,0,.7)','rgba(52,199,89,.7)','rgba(255,59,48,.7)','rgba(175,82,222,.7)','rgba(90,200,250,.7)'];
+  var B=['rgba(0,122,255,1)','rgba(255,149,0,1)','rgba(52,199,89,1)','rgba(255,59,48,1)','rgba(175,82,222,1)','rgba(90,200,250,1)'];
+  var d={{ data.chart|tojson }};
+  var el=document.getElementById('chart');if(!el||!d||!d.labels||!d.labels.length)return;
+  var isHoriz='{{ tab }}'==='weekend'||'{{ tab }}'==='city';
+  var isLine='{{ tab }}'==='business';
+  var ds=d.datasets.map(function(s,i){return{label:s.label,data:s.data,
+    backgroundColor:C[i%C.length],borderColor:B[i%B.length],
+    borderWidth:isLine?2:1,fill:isLine?'origin':undefined,tension:.3,pointRadius:isLine?1:undefined}});
+  new Chart(el,{type:isLine?'line':'bar',data:{labels:d.labels,datasets:ds},options:{
+    indexAxis:isHoriz?'y':'x',responsive:true,maintainAspectRatio:false,
+    interaction:{mode:'index',intersect:false},
+    plugins:{legend:{display:ds.length>1}},
+    scales:{x:{beginAtZero:true,ticks:{maxRotation:45,autoSkip:true,maxTicksLimit:40,font:{size:11}}},
+            y:{beginAtZero:true,ticks:{font:{size:11}}}}}});
+})();
+</script>
+{% endif %}
+{% endblock %}
