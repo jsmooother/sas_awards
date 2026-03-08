@@ -13,6 +13,9 @@ env/
 *.sqlite3
 *.db
 
+# Partner awards state (cookies, etc.)
+partner_awards_state.json
+
 # Logs
 *.log
 *.err

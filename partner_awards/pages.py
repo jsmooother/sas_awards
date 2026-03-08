@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import requests
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -273,6 +275,8 @@ def home():
 
 @bp.route("/virgin")
 def virgin():
+    state = read_state()
+    has_cookies = bool((state.get("virgin_cookie_string") or "").strip())
     Path(PARTNER_DB_DIR).mkdir(parents=True, exist_ok=True)
     conn = get_partner_conn()
     try:
@@ -282,9 +286,93 @@ def virgin():
             "partner_awards_virgin.html",
             watch_routes=watch_routes,
             lhr_routes=VIRGIN_LHR_ROUTES,
+            has_cookies=has_cookies,
         )
     finally:
         conn.close()
+
+
+@bp.route("/virgin/cookies", methods=["POST"])
+def virgin_cookies():
+    raw = (request.form.get("cookie_string") or "").strip()
+    cookie_string = _extract_cookie_header(raw)
+    write_state(virgin_cookie_string=cookie_string)
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        count = len(cookie_string.split("; ")) if cookie_string else 0
+        msg = "Cookies saved." if cookie_string else "Cookies cleared."
+        if cookie_string and "set-cookie:" in raw.lower():
+            msg = f"Extracted {count} cookie(s) and saved."
+        return jsonify({
+            "ok": True,
+            "has_cookies": bool(cookie_string),
+            "message": msg,
+            "preview": (cookie_string[:80] + "…") if len(cookie_string) > 80 else cookie_string,
+        })
+    flash("Cookies saved." if cookie_string else "Cookies cleared.", "success")
+    return redirect(url_for("partner_awards_pages.virgin"))
+
+
+@bp.route("/virgin/cookies/test", methods=["POST"])
+def virgin_cookies_test():
+    """Call Virgin SearchOffers API with stored cookie; return ok if we get JSON (not 444)."""
+    state = read_state()
+    cookie_string = (state.get("virgin_cookie_string") or "").strip()
+    if not cookie_string:
+        return jsonify({"ok": False, "message": "No cookie saved. Paste and save first."})
+    url = "https://www.virginatlantic.com/flights/search/api/graphql"
+    payload = {
+        "operationName": "SearchOffers",
+        "variables": {
+            "request": {
+                "pos": None,
+                "parties": None,
+                "customerDetails": [{"custId": "ADT_0", "ptc": "ADT"}],
+                "flightSearchRequest": {
+                    "searchOriginDestinations": [
+                        {"origin": "LON", "destination": "NYC", "departureDate": "2026-10-24"}
+                    ]
+                },
+            }
+        },
+        "extensions": {"clientLibrary": {"name": "@apollo/client", "version": "4.1.6"}},
+        "query": "query SearchOffers($request: FlightOfferRequestInput!) { searchOffers(request: $request) { result { criteria { origin { code } destination { code } } calendar { from to fromPrices { fromDate price { awardPoints } } } } } }",
+    }
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Accept-Language": "en-GB,en;q=0.9",
+        "Origin": "https://www.virginatlantic.com",
+        "Referer": "https://www.virginatlantic.com/flights/search",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Sec-Ch-Ua": '"Not_A Brand";v="8", "Chromium";v="120"',
+        "Sec-Ch-Ua-Mobile": "?0",
+        "Sec-Ch-Ua-Platform": '"macOS"',
+        "Sec-Fetch-Dest": "empty",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Site": "same-origin",
+        "Cookie": cookie_string,
+    }
+    try:
+        r = requests.post(url, json=payload, headers=headers, timeout=15)
+    except Exception as e:
+        return jsonify({"ok": False, "message": "Request failed: " + str(e)})
+    if r.status_code != 200:
+        msg = "API returned %s." % r.status_code
+        cookie_count = len([p for p in cookie_string.split("; ") if p.strip() and "=" in p]) if cookie_string else 0
+        if r.status_code == 444:
+            msg += " Sent %d cookie pair(s). 444 can mean Virgin’s WAF is blocking this request (e.g. TLS fingerprint: Python doesn’t look like Chrome). Try the same cookie in the script from this machine; if that also gets 444, the site may only accept real browsers." % cookie_count
+        else:
+            msg += " Cookie may be expired or invalid. (Sent %d pair(s).)" % cookie_count
+        return jsonify({"ok": False, "message": msg})
+    try:
+        data = r.json()
+        if data.get("errors"):
+            return jsonify({"ok": False, "message": "GraphQL errors: " + str(data["errors"])[:200]})
+        if data.get("data", {}).get("searchOffers", {}).get("result"):
+            return jsonify({"ok": True, "message": "Cookie works. Got calendar/offers."})
+        return jsonify({"ok": True, "message": "Cookie accepted (200). Result empty or partial."})
+    except ValueError:
+        return jsonify({"ok": False, "message": "API returned non-JSON (maybe blocked)."})
 
 
 @bp.route("/flyingblue", methods=["GET"])
@@ -337,7 +425,7 @@ def flyingblue_clear_block():
 
 @bp.route("/flyingblue/cookies", methods=["POST"])
 def flyingblue_cookies():
-    cookie_string = (request.form.get("cookie_string") or "").strip()
+    cookie_string = _extract_cookie_header(request.form.get("cookie_string") or "")
     write_state(afkl_cookie_string=cookie_string)
     if request.headers.get("X-Requested-With") == "XMLHttpRequest":
         return jsonify({
@@ -385,6 +473,78 @@ def flyingblue_run_batch():
 # ═══════════════════════════════════════════════════════════════════════════
 # Watchlist
 # ═══════════════════════════════════════════════════════════════════════════
+
+def _extract_cookie_header(pasted: str) -> str:
+    """
+    Extract a Cookie header value (name=value; name2=value2; ...) from pasted text.
+    Accepts: raw Cookie header, Set-Cookie line(s) (with or without "Set-Cookie:" prefix),
+    or "Copy value" from DevTools which is the value part of one Set-Cookie.
+    """
+    text = (pasted or "").strip().replace("\r\n", "\n").replace("\r", "\n")
+    if not text:
+        return ""
+
+    def take_name_value(line: str) -> str | None:
+        """First token (until ; or newline) is name=value."""
+        segment = line.split("\n")[0].strip().split(";")[0].strip()
+        return segment if segment and "=" in segment else None
+
+    # Explicit Set-Cookie: lines (one or more)
+    if "set-cookie:" in text.lower():
+        parts = []
+        for block in re.split(r"Set-Cookie:\s*", text, flags=re.IGNORECASE):
+            block = block.strip()
+            if not block:
+                continue
+            seg = take_name_value(block)
+            if seg:
+                parts.append(seg)
+        if parts:
+            return "; ".join(parts)
+
+    # "Copy value" from Set-Cookie (no "Set-Cookie:" prefix): e.g. "bm_s=YAAQ...; Domain=.x.com; Path=/; Secure"
+    # One or more lines; each may have attributes after the first ";"
+    parts = []
+    for line in text.split("\n"):
+        line = line.strip()
+        if not line or "=" not in line:
+            continue
+        first = line.split(";")[0].strip()
+        if not first or "=" not in first:
+            continue
+        rest = line[len(first) :].lstrip()
+        if rest.startswith(";"):
+            rest = rest[1:].strip().lower()
+            if any(
+                rest.startswith(x)
+                for x in ("domain=", "path=", "expires=", "max-age=", "secure", "httponly", "samesite=")
+            ):
+                parts.append(first)
+    if parts:
+        return "; ".join(parts)
+
+    # Strip "Cookie:" prefix if present
+    if text.lower().startswith("cookie:"):
+        text = text[7:].strip()
+    # DevTools sometimes pastes "cookie" as first line, then value, then other headers (priority, referer, ...)
+    lines = text.split("\n")
+    if lines and lines[0].strip().lower() == "cookie":
+        lines = lines[1:]
+        text = "\n".join(lines).strip()
+    # If there are newlines, take only the first line that looks like a cookie value (contains "=" and "; ")
+    if "\n" in text:
+        for line in text.split("\n"):
+            line = line.strip()
+            if "=" in line and "; " in line:
+                return " ".join(line.split())
+        # No line with both; use first line that has "="
+        for line in text.split("\n"):
+            line = line.strip()
+            if "=" in line:
+                return " ".join(line.split())
+    # Single line or already clean - normalize whitespace
+    return " ".join(text.split())
+
 
 def _watchlist_redirect(program: str = None):
     """Redirect to Virgin, Flying Blue Routes, or Flying Blue dashboard after watchlist action."""
