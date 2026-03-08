@@ -15,7 +15,7 @@ Ingests and displays Air France / KLM (Flying Blue) award offers. Fully separate
    python -m playwright install chromium
    ```
 
-3. **Run schema** (tables are created automatically on first ingest; or run manually):
+3. **Database:** Tables are created and migrated automatically. No manual step is required. The first time the app or worker uses the partner DB (e.g. opening Flying Blue Routes or running a job), `init_db(conn)` runs: it applies `schema.sql` (CREATE TABLE IF NOT EXISTS) and then runs in-code migrations (ALTER TABLE / table recreates) for existing DBs. So after a merge or deploy, existing installs get new tables and new columns without running any script. To create the file empty and let the app create tables, ensure `~/sas_awards` exists; the DB path is `~/sas_awards/partner_awards.sqlite` (or `$SAS_DB_PATH/partner_awards.sqlite`). Optional manual run:
    ```bash
    sqlite3 ~/sas_awards/partner_awards.sqlite < partner_awards/airfrance/schema.sql
    ```
