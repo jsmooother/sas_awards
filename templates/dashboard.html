@@ -153,7 +153,6 @@
         <input class="f-input f-date" type="date" name="to" value="{{ filters['to'] }}">
       </div>
       {% endif %}
-      <button type="submit" class="go-btn">Search</button>
     </div>
   </form>
 </div></div>
@@ -251,18 +250,25 @@
 <script>
 (function(){
   var DN=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  var form=document.getElementById('f');
+  function submitForm(){ if(form) form.submit(); }
   window.sm=function(mode){
     document.getElementById('mi').value=mode;
     document.querySelectorAll('.mode-btn').forEach(function(b,i){b.classList.toggle('active',i===(mode==='flights'?0:1))});
     var ci=document.getElementById('ci');
     if(mode==='weekend'&&(ci.value==='plus'||ci.value==='economy'))ci.value='all';
     if(mode==='flights'&&ci.value==='business_plus')ci.value='all';
+    submitForm();
   };
   window.sr=function(k){document.getElementById('ri').value=k;document.querySelectorAll('.pill[data-r],.pill:not([data-r]):not([data-c])').forEach(function(b){
     if(b.dataset.r!==undefined)b.classList.toggle('active',b.dataset.r===k);
     else if(!b.dataset.c)b.classList.toggle('active',k==='');
-  })};
-  window.sc=function(k){document.getElementById('ci').value=k;document.querySelectorAll('.pill[data-c]').forEach(function(p){p.classList.toggle('active',p.dataset.c===k)})};
+  }); submitForm(); };
+  window.sc=function(k){document.getElementById('ci').value=k;document.querySelectorAll('.pill[data-c]').forEach(function(p){p.classList.toggle('active',p.dataset.c===k)}); submitForm(); };
+  form.querySelectorAll('select[name="origin"], input[name="min_seats"], input[name="from"], input[name="to"]').forEach(function(el){
+    el.addEventListener('change', submitForm);
+  });
+  form.querySelector('input[name="city"]').addEventListener('blur', submitForm);
 
   var m=document.getElementById('dm'),mb=document.getElementById('db'),mt=document.getElementById('dt');
   function cm(){m.setAttribute('hidden','')}

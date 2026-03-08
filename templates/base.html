@@ -40,6 +40,7 @@
     .sidebar a:hover { background: #f5f5f7; color: #1d1d1f; }
     .sidebar a.active { background: #e8f4ff; color: #007aff; border-left-color: #007aff; }
     .sidebar-icon { width: 20px; text-align: center; font-size: 1rem; opacity: 0.7; }
+    .sidebar a.sidebar-placeholder { color: #86868b; cursor: default; pointer-events: none; }
     .main { flex: 1; padding: 2rem 2.5rem; overflow-x: auto; max-width: 1200px; }
     .page-header { margin-bottom: 2rem; }
     .page-header-with-search { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1.5rem; }
@@ -354,6 +355,17 @@
     .modal-close { background: none; border: none; font-size: 1.5rem; color: #86868b; cursor: pointer; padding: 0 0.25rem; line-height: 1; }
     .modal-close:hover { color: #1d1d1f; }
     .modal-body { padding: 1.5rem; overflow-y: auto; max-height: 60vh; }
+    .copy-row { display: flex; align-items: center; justify-content: space-between; padding: 0.45rem 0.65rem; background: rgba(0,0,0,0.03); border-radius: 8px; font-size: 0.78rem; color: #515154; margin-bottom: 0.7rem; }
+    .copy-btn { padding: 0.2rem 0.5rem; border-radius: 6px; border: 1px solid rgba(0,0,0,0.12); background: #fff; font-size: 0.72rem; cursor: pointer; color: #007aff; font-weight: 500; }
+    .detail-legs { display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
+    .detail-leg { flex: 1; min-width: 150px; padding: 1rem; background: rgba(0,0,0,0.03); border-radius: 10px; }
+    .dl-t { font-size: 0.65rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #86868b; margin-bottom: 0.4rem; }
+    .dl-d { font-size: 1rem; font-weight: 600; margin-bottom: 0.12rem; }
+    .dl-w { font-size: 0.78rem; color: #86868b; margin-bottom: 0.45rem; }
+    .dl-s { font-size: 0.82rem; color: #515154; line-height: 1.6; }
+    .dl-s strong { color: #1d1d1f; }
+    .book-btn { display: block; width: 100%; padding: 0.8rem; text-align: center; background: #000080; color: #fff; border: none; border-radius: 10px; font-size: 0.95rem; font-weight: 600; cursor: pointer; text-decoration: none; transition: background 0.2s; margin-top: 0.5rem; }
+    .book-btn:hover { background: #000066; }
     .modal-detail-leg { margin-bottom: 1.25rem; padding: 1rem; background: rgba(0,0,0,0.03); border-radius: 8px; }
     .modal-detail-leg:last-child { margin-bottom: 0; }
     .modal-detail-route { font-weight: 600; margin-bottom: 0.5rem; }
@@ -442,10 +454,19 @@
 <body>
   <div class="layout">
     <aside class="sidebar">
-      <div class="sidebar-brand">SAS Awards</div>
+      <div class="sidebar-brand">Awards</div>
       <div class="sidebar-section">
-        <a href="/" class="{% if request.path == '/' %}active{% endif %}"><span class="sidebar-icon">✈</span> Dashboard</a>
+        <div class="sidebar-section-title">SAS</div>
+        <a href="/" class="{% if request.path == '/' %}active{% endif %}"><span class="sidebar-icon">✈</span> SAS dashboard</a>
         <a href="/reports" class="{% if request.path == '/reports' %}active{% endif %}"><span class="sidebar-icon">◆</span> Reports</a>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">Flying Blue awards</div>
+        <a href="#" class="sidebar-placeholder"><span class="sidebar-icon">·</span> Coming soon</a>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">Virgin Atlantic rewards</div>
+        <a href="#" class="sidebar-placeholder"><span class="sidebar-icon">·</span> Coming soon</a>
       </div>
     </aside>
     <main class="main">

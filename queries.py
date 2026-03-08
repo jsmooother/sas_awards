@@ -270,12 +270,14 @@ def route_detail(origin, dest, date):
 # Reports
 # ═══════════════════════════════════════════════════════════════════════════
 
-def report_region(cabin="all", origin="", min_seats=MIN_SEATS):
+def report_region(cabin="all", origin="", country="", min_seats=MIN_SEATS):
     """Countries aggregated with seat counts, grouped into regions."""
     conn = get_conn()
     cur = conn.cursor()
     seat_cond, _ = _cabin_clause(cabin, min_seats)
     origin_cond = f"AND origin = '{origin}'" if origin else ""
+    country_cond = "AND country_name = ?" if country else ""
+    params = [country] if country else []
 
     cur.execute(f"""
         SELECT country_name,
@@ -285,10 +287,10 @@ def report_region(cabin="all", origin="", min_seats=MIN_SEATS):
                SUM(CASE WHEN ap >= {min_seats} THEN 1 ELSE 0 END) AS plus,
                SUM(CASE WHEN ag >= {min_seats} THEN 1 ELSE 0 END) AS eco
         FROM flights
-        WHERE date >= date('now') AND {seat_cond} {origin_cond}
+        WHERE date >= date('now') AND {seat_cond} {origin_cond} {country_cond}
         GROUP BY country_name
         ORDER BY flights DESC
-    """)
+    """, params if params else [])
     rows = cur.fetchall()
     conn.close()
 
@@ -362,17 +364,18 @@ def report_cities(countries=None, cabin="all", origin="", min_seats=MIN_SEATS):
     return {"chart": chart, "table": table}
 
 
-def report_business(origin="", min_seats=MIN_SEATS):
+def report_business(origin="", country="", min_seats=MIN_SEATS):
     """Business seats aggregated by date, split by origin."""
     conn = get_conn()
     cur = conn.cursor()
     origin_cond = "AND origin = ?" if origin else ""
-    params = [min_seats] + ([origin] if origin else [])
+    country_cond = "AND country_name = ?" if country else ""
+    params = [min_seats] + ([origin] if origin else []) + ([country] if country else [])
 
     cur.execute(f"""
         SELECT date, origin, SUM(ab) AS total_biz, COUNT(*) AS routes
         FROM flights
-        WHERE ab >= ? AND date >= date('now') {origin_cond}
+        WHERE ab >= ? AND date >= date('now') {origin_cond} {country_cond}
         GROUP BY date, origin ORDER BY date, origin
     """, params)
     rows = cur.fetchall()
@@ -394,7 +397,7 @@ def report_business(origin="", min_seats=MIN_SEATS):
     cur.execute(f"""
         SELECT origin, city_name, airport_code, date, ab
         FROM flights
-        WHERE ab >= ? AND date >= date('now') {origin_cond}
+        WHERE ab >= ? AND date >= date('now') {origin_cond} {country_cond}
         ORDER BY date, origin, city_name COLLATE NOCASE LIMIT 200
     """, params)
     table = [
@@ -405,14 +408,18 @@ def report_business(origin="", min_seats=MIN_SEATS):
     return {"chart": chart, "table": table}
 
 
-def report_weekend(origin="", min_seats=MIN_SEATS):
-    """Weekend pairs aggregated by city."""
+def report_weekend(origin="", country="", min_seats=MIN_SEATS, cabin="all"):
+    """Weekend pairs aggregated by city. cabin: all, business_plus, business."""
+    seat_out, seat_in = _weekend_cabin_clause(cabin, min_seats)
     conn = get_conn()
     cur = conn.cursor()
     origin_cond = "AND inb.origin = ?" if origin else ""
-    params = ([min_seats] * 4) + [TRIP_DAYS_MIN, TRIP_DAYS_MAX]
+    country_cond = "AND inb.country_name = ?" if country else ""
+    params = [TRIP_DAYS_MIN, TRIP_DAYS_MAX]
     if origin:
         params.append(origin)
+    if country:
+        params.append(country)
 
     cur.execute(f"""
         SELECT inb.origin, inb.city_name, inb.airport_code,
@@ -422,12 +429,12 @@ def report_weekend(origin="", min_seats=MIN_SEATS):
         JOIN flights AS outb
           ON inb.airport_code = outb.airport_code AND inb.origin = outb.origin
         WHERE inb.direction = 'inbound' AND outb.direction = 'outbound'
-          AND (inb.ag >= ? OR inb.ap >= ?) AND (outb.ag >= ? OR outb.ap >= ?)
+          AND {seat_out} AND {seat_in}
           AND strftime('%w', inb.date) IN ('6','0','1')
           AND strftime('%w', outb.date) IN ('3','4','5')
           AND (julianday(inb.date) - julianday(outb.date)) BETWEEN ? AND ?
           AND date(inb.date) BETWEEN date('now') AND date('now','+1 year')
-          {origin_cond}
+          {origin_cond} {country_cond}
         GROUP BY inb.origin, inb.city_name, inb.airport_code
         ORDER BY pairs DESC
     """, params)
@@ -510,3 +517,101 @@ def report_new():
     }
     conn.close()
     return {"chart": chart, "table": table, "latest": latest, "prev": prev}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Reports drill-down and calendar
+# ═══════════════════════════════════════════════════════════════════════════
+
+def cities_for_country(country, cabin="all", origin="", min_seats=MIN_SEATS):
+    """
+    Cities in a single country for region-tab drill-down.
+    Always includes origin in each row (one row per origin when origin filter is empty).
+    """
+    conn = get_conn()
+    cur = conn.cursor()
+    seat_cond, _ = _cabin_clause(cabin, min_seats)
+    conditions = [
+        "date >= date('now')",
+        seat_cond,
+        "country_name = ?",
+    ]
+    params = [country]
+    if origin:
+        conditions.append("origin = ?")
+        params.append(origin)
+
+    where = " AND ".join(conditions)
+    cur.execute(f"""
+        SELECT origin, city_name, airport_code, country_name,
+               COUNT(*) AS flights,
+               SUM(ab) AS total_biz, SUM(ap) AS total_plus, SUM(ag) AS total_eco
+        FROM flights WHERE {where}
+        GROUP BY origin, city_name, airport_code, country_name
+        ORDER BY (SUM(ab)*3 + SUM(ap)*2 + SUM(ag)) DESC
+        LIMIT 100
+    """, params)
+    cols = ["origin", "city", "code", "country", "flights", "biz", "plus", "eco"]
+    table = [dict(zip(cols, r)) for r in cur.fetchall()]
+    conn.close()
+    return {"table": table}
+
+
+def calendar_availability(origin, airport_code, min_seats=MIN_SEATS):
+    """
+    Daily availability for origin → airport_code from today to +365 days.
+    Returns dict: date_str -> {"outbound": {"ab", "ap", "ag"}, "inbound": {...}}.
+    """
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT date, direction, SUM(ab) AS ab, SUM(ap) AS ap, SUM(ag) AS ag
+        FROM flights
+        WHERE origin = ? AND airport_code = ?
+          AND date >= date('now')
+          AND date <= date('now', '+365 days')
+        GROUP BY date, direction
+    """, (origin, airport_code))
+    by_date = {}
+    for date_str, direction, ab, ap, ag in cur.fetchall():
+        by_date.setdefault(date_str, {})[direction] = {
+            "ab": ab or 0, "ap": ap or 0, "ag": ag or 0,
+        }
+    conn.close()
+    return by_date
+
+
+def weekend_pairs_for_route(origin, airport_code, min_seats=MIN_SEATS, cabin="all"):
+    """
+    Weekend pairs for a single route (origin → airport_code): outbound Wed/Thu/Fri,
+    return Sat/Sun/Mon, 3–4 days. cabin: all, business_plus, business.
+    """
+    seat_out, seat_in = _weekend_cabin_clause(cabin, min_seats)
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute(f"""
+        SELECT outb.date AS outbound, inb.date AS inbound,
+               outb.ab AS ab_out, outb.ap AS ap_out, outb.ag AS ag_out,
+               inb.ab AS ab_in, inb.ap AS ap_in, inb.ag AS ag_in
+        FROM flights AS inb
+        JOIN flights AS outb
+          ON inb.airport_code = outb.airport_code AND inb.origin = outb.origin
+        WHERE inb.origin = ? AND inb.airport_code = ?
+          AND inb.direction = 'inbound' AND outb.direction = 'outbound'
+          AND {seat_out} AND {seat_in}
+          AND strftime('%w', inb.date) IN ('6','0','1')
+          AND strftime('%w', outb.date) IN ('3','4','5')
+          AND (julianday(inb.date) - julianday(outb.date)) BETWEEN ? AND ?
+          AND date(inb.date) BETWEEN date('now') AND date('now','+365 days')
+        ORDER BY outb.date, inb.date
+    """, (origin, airport_code, TRIP_DAYS_MIN, TRIP_DAYS_MAX))
+    rows = [
+        {
+            "outbound": r[0], "inbound": r[1],
+            "ab_out": r[2], "ap_out": r[3], "ag_out": r[4],
+            "ab_in": r[5], "ap_in": r[6], "ag_in": r[7],
+        }
+        for r in cur.fetchall()
+    ]
+    conn.close()
+    return rows

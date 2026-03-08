@@ -12,6 +12,8 @@ import regions as _regions
 from report_config import MIN_SEATS
 
 ROUTES_API = "https://www.sas.se/bff/award-finder/routes/v1"
+# SAS booking: sas.se/boka/flyg is 404; use flysas.com booking page
+BOOK_BASE_URL = "https://www.flysas.com/en/book"
 
 app = Flask(__name__)
 
@@ -66,34 +68,96 @@ def reports():
     tab = request.args.get("tab", "region")
     origin = request.args.get("origin", "")
     cabin = request.args.get("cabin", "all")
+    country = request.args.get("country", "")
     min_seats = int(request.args.get("min_seats", MIN_SEATS))
     region = request.args.get("region", "")
 
     data = None
     if tab == "region":
-        data = queries.report_region(cabin=cabin, origin=origin, min_seats=min_seats)
+        data = queries.report_region(
+            cabin=cabin, origin=origin, country=country, min_seats=min_seats
+        )
     elif tab == "city":
-        countries = _regions.region_countries(region) if region else None
+        countries = [country] if country else (
+            _regions.region_countries(region) if region else None
+        )
         data = queries.report_cities(
             countries=countries, cabin=cabin, origin=origin, min_seats=min_seats
         )
     elif tab == "business":
-        data = queries.report_business(origin=origin, min_seats=min_seats)
+        data = queries.report_business(
+            origin=origin, country=country, min_seats=min_seats
+        )
     elif tab == "weekend":
-        data = queries.report_weekend(origin=origin, min_seats=min_seats)
+        if cabin not in ("all", "business_plus", "business"):
+            cabin = "all"
+        data = queries.report_weekend(
+            origin=origin, country=country, min_seats=min_seats, cabin=cabin
+        )
     elif tab == "new":
         data = queries.report_new()
 
+    countries_list = _regions.all_countries()
     return render_template(
         "reports.html", tab=tab, data=data,
-        filters={"origin": origin, "cabin": cabin,
+        filters={"origin": origin, "cabin": cabin, "country": country,
                  "min_seats": min_seats, "region": region},
+        countries_list=countries_list,
     )
 
 
 # ═══════════════════════════════════════════════════════════════════════════
 # API endpoints
 # ═══════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/reports/region/cities")
+def api_reports_region_cities():
+    """Cities in a single country for region-tab drill-down."""
+    country = request.args.get("country", "")
+    cabin = request.args.get("cabin", "all")
+    origin = request.args.get("origin", "")
+    min_seats = int(request.args.get("min_seats", MIN_SEATS))
+    if not country:
+        return jsonify({"error": "Missing country"}), 400
+    data = queries.cities_for_country(
+        country=country, cabin=cabin, origin=origin, min_seats=min_seats
+    )
+    return jsonify({"table": data.get("table", [])})
+
+
+@app.route("/api/reports/calendar")
+def api_reports_calendar():
+    """Daily availability for origin+code from today to +365 days."""
+    origin = request.args.get("origin", "")
+    code = request.args.get("code", "")
+    min_seats = int(request.args.get("min_seats", MIN_SEATS))
+    if not origin or not code:
+        return jsonify({"error": "Missing origin or code"}), 400
+    days = queries.calendar_availability(origin, code, min_seats=min_seats)
+    city_name = ""
+    if days:
+        first_date = next(iter(days))
+        detail = queries.route_detail(origin, code, first_date)
+        if detail:
+            leg = detail.get("outbound") or detail.get("inbound") or {}
+            city_name = leg.get("city_name", "")
+    return jsonify({"origin": origin, "code": code, "city": city_name, "days": days})
+
+
+@app.route("/api/reports/calendar/weekend-pairs")
+def api_reports_calendar_weekend_pairs():
+    """Weekend pairs (out Wed–Fri, back Sat–Mon) for a single route."""
+    origin = request.args.get("origin", "")
+    code = request.args.get("code", "")
+    min_seats = int(request.args.get("min_seats", MIN_SEATS))
+    cabin = request.args.get("cabin", "all")
+    if not origin or not code:
+        return jsonify({"error": "Missing origin or code"}), 400
+    pairs = queries.weekend_pairs_for_route(
+        origin, code, min_seats=min_seats, cabin=cabin
+    )
+    return jsonify({"origin": origin, "code": code, "pairs": pairs})
+
 
 @app.route("/api/detail")
 def api_detail():
@@ -108,7 +172,7 @@ def api_detail():
         return jsonify({"error": "Route not found"}), 404
 
     sas_url = (
-        f"https://www.sas.se/boka/flyg?from={origin}&to={dest}"
+        f"{BOOK_BASE_URL}?from={origin}&to={dest}"
         f"&outDate={date}&adt=2&bookingType=O"
     )
     return jsonify({"legs": detail, "booking_url": sas_url})
@@ -152,7 +216,7 @@ def api_weekend_pair_detail():
         return jsonify({"error": "Pair not found"}), 404
 
     sas_url = (
-        f"https://www.sas.se/boka/flyg?from={origin}&to={dest}"
+        f"{BOOK_BASE_URL}?from={origin}&to={dest}"
         f"&outDate={outbound}&inDate={inbound}&adt=2&bookingType=R"
     )
     return jsonify({
