@@ -55,3 +55,11 @@ def region_countries(region_key: str) -> list[str]:
 
 def all_region_keys() -> list[str]:
     return list(REGIONS.keys())
+
+
+def all_countries() -> list[str]:
+    """Sorted list of all country names for filter dropdowns."""
+    countries = set()
+    for r in REGIONS.values():
+        countries.update(r["countries"])
+    return sorted(countries)

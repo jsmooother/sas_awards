@@ -213,3 +213,24 @@ def test_api_weekend_pair_detail_valid(client):
         "&outbound=2026-03-05&inbound=2026-03-08"
     )
     assert r.status_code in (200, 404)
+
+
+def test_extract_cookie_header_from_set_cookie():
+    from partner_awards.pages import _extract_cookie_header
+    # Single Set-Cookie (semicolon+space before attributes)
+    paste = "Set-Cookie: bm_s=YAAQabc123; Domain=.virginatlantic.com; Path=/; Secure; HttpOnly"
+    assert _extract_cookie_header(paste) == "bm_s=YAAQabc123"
+    # Multiple Set-Cookie lines
+    paste2 = """Set-Cookie: com.virginatlantic.edge.id=E1XD2JDPCZNY; Secure; path=/; Expires=Mon, 09 Mar 2026 18:36:20 GMT
+Set-Cookie: bm_s=YAAQlongvalue; Domain=.virginatlantic.com; Path=/; Expires=Wed; Secure; HttpOnly"""
+    out = _extract_cookie_header(paste2)
+    assert "com.virginatlantic.edge.id=E1XD2JDPCZNY" in out
+    assert "bm_s=YAAQlongvalue" in out
+    assert out.count("; ") == 1  # one join between the two cookies
+    # Semicolon without space (Chrome sometimes)
+    paste3 = "Set-Cookie: name=val;Path=/;Secure"
+    assert _extract_cookie_header(paste3) == "name=val"
+    # Already cookie format - pass through
+    assert _extract_cookie_header("a=1; b=2") == "a=1; b=2"
+    # Cookie: prefix stripped
+    assert _extract_cookie_header("Cookie: a=1; b=2") == "a=1; b=2"

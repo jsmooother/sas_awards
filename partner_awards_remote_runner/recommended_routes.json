@@ -1,0 +1,25 @@
+{
+  "comment": "5-10 routes per origin for Flying Blue analysis. Outbound+inbound friendly.",
+  "routes": [
+    {"origin": "AMS", "destination": "JNB"},
+    {"origin": "AMS", "destination": "CPT"},
+    {"origin": "AMS", "destination": "ADD"},
+    {"origin": "AMS", "destination": "NBO"},
+    {"origin": "AMS", "destination": "CAI"},
+    {"origin": "AMS", "destination": "LHR"},
+    {"origin": "AMS", "destination": "CDG"},
+    {"origin": "AMS", "destination": "BKK"},
+    {"origin": "AMS", "destination": "SIN"},
+    {"origin": "AMS", "destination": "EZE"},
+    {"origin": "PAR", "destination": "JNB"},
+    {"origin": "PAR", "destination": "CPT"},
+    {"origin": "PAR", "destination": "ADD"},
+    {"origin": "PAR", "destination": "NBO"},
+    {"origin": "PAR", "destination": "MRU"},
+    {"origin": "PAR", "destination": "RUN"},
+    {"origin": "PAR", "destination": "BKK"},
+    {"origin": "PAR", "destination": "SIN"},
+    {"origin": "PAR", "destination": "EZE"},
+    {"origin": "PAR", "destination": "SCL"}
+  ]
+}

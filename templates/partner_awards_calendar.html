@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block title %}Partner Awards Calendar Fares – SAS Awards{% endblock %}
+{% block content %}
+<div class="page-header">
+  <p style="margin:0 0 0.25rem;font-size:0.9rem;"><a href="/partner-awards/flyingblue{% if month %}?month={{ month }}&cabin={{ cabin }}{% endif %}">← Back to Flying Blue dashboard</a></p>
+  <h1 class="page-title">Partner Awards Calendar Fares</h1>
+  <p class="page-subtitle" style="margin:0;color:var(--color-text-secondary);font-size:1rem;">Lowest miles per day (from LowestFareOffers) · {{ origin }} → {{ destination }}</p>
+  {% if ingest_types %}
+  <p class="page-subtitle" style="margin:0.5rem 0 0;font-size:0.875rem;">
+    Host: {% for t in ingest_types %}<span class="partner-ingest-badge">{{ t or 'default' }}</span>{% endfor %}
+  </p>
+  {% endif %}
+</div>
+
+{% if blocked_until %}
+<div class="card" style="margin-bottom:1rem;border-color:var(--color-warning,orange);">
+  <div class="card-inner" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;">
+    <span><strong>Fetching paused</strong> until {{ blocked_until }} due to blocking. The runner will not scan until then.</span>
+    <form method="post" action="/partner-awards/flyingblue/clear-block" style="margin:0;">
+      <button type="submit" class="btn">Clear block & resume</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{% if last_run %}
+<div class="card" style="margin-bottom:1rem;background:var(--color-bg-secondary,#f8f9fa);">
+  <div class="card-inner">
+    <strong>Last run:</strong> {{ last_run.started_at or '—' }}
+    {% if last_run.host_used %} · Host: {{ last_run.host_used }}{% endif %}
+    · {{ rows|length }} dates
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-inner">
+    <form method="get" action="" class="toolbar filters" style="margin-bottom:1rem;">
+      <input type="text" name="origin" placeholder="Origin" value="{{ origin }}" style="width:4rem;">
+      <input type="text" name="destination" placeholder="Dest" value="{{ destination }}" style="width:4rem;">
+      <input type="month" name="month" placeholder="Month" value="{{ month or '' }}" style="width:9rem;" title="YYYY-MM for month grid">
+      <select name="cabin" style="width:7rem;">
+        <option value="ECONOMY" {% if cabin == 'ECONOMY' %}selected{% endif %}>Economy</option>
+        <option value="PREMIUM" {% if cabin == 'PREMIUM' %}selected{% endif %}>Premium</option>
+        <option value="BUSINESS" {% if cabin == 'BUSINESS' %}selected{% endif %}>Business</option>
+      </select>
+      <input type="date" name="start_date" placeholder="From" value="{{ start_date or '' }}" style="width:10rem;" title="Date range (when not in month view)">
+      <input type="date" name="end_date" placeholder="To" value="{{ end_date or '' }}" style="width:10rem;">
+      <select name="view_mode" onchange="this.form.submit()" style="width:7rem;">
+        <option value="best" {% if view_mode == 'best' %}selected{% endif %}>Best overall</option>
+        <option value="per_host" {% if view_mode == 'per_host' %}selected{% endif %}>Per host</option>
+      </select>
+      {% if view_mode == 'per_host' %}
+      <select name="host_used" style="width:8rem;">
+        <option value="">All hosts</option>
+        {% for t in ingest_types %}
+        <option value="{{ t }}" {% if host_used == t %}selected{% endif %}>{{ t or 'default' }}</option>
+        {% endfor %}
+      </select>
+      {% endif %}
+      <button type="submit">Filter</button>
+    </form>
+    {% if routes_available %}
+    <p class="table-hint" style="margin:0 0 0.5rem;font-size:0.8rem;">Routes: {% for r in routes_available %}<a href="?origin={{ r.origin }}&destination={{ r.destination }}&month={{ month or '' }}&cabin={{ cabin }}&view_mode={{ view_mode or 'best' }}">{{ r.origin }}-{{ r.destination }}</a>{% if not loop.last %} · {% endif %}{% endfor %}</p>
+    {% endif %}
+    <p class="table-hint" style="margin:0 0 1rem;">Calendar data from remote runner (LowestFareOffers). Min miles highlighted in green.</p>
+    {% if month_grid %}
+    <h3 style="margin:0 0 0.5rem;">{{ month_grid.month_name }} · {{ origin }} → {{ destination }} · {{ cabin }}</h3>
+    <p style="margin:0 0 0.5rem;font-size:1rem;"><strong>from {{ min_miles_display }} Miles</strong> · Currency: MILES</p>
+    <p style="margin:0 0 1rem;">
+      <button type="button" class="pa-telegram-btn" onclick="paFetchTelegram('{{ origin }}','{{ destination }}','{{ month }}','{{ cabin }}')">Generate Telegram text</button>
+      <span id="pa-telegram-status"></span>
+    </p>
+    <pre id="pa-telegram-output" style="display:none;font-size:0.8rem;white-space:pre-wrap;background:var(--color-bg-secondary,#f5f5f5);padding:0.5rem;"></pre>
+    <div class="table-wrapper">
+      <table class="partner-month-grid">
+        <thead>
+          <tr>
+            <th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th><th>Sun</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for week in month_grid.weeks %}
+          <tr>
+            {% for cell in week %}
+            <td class="{% if cell.is_min %}partner-best-day{% endif %}">
+              {% if cell.day %}<span class="day-num">{{ cell.day }}</span>{% if cell.formatted != '—' %} · {{ cell.formatted }}{% endif %}{% endif %}
+            </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% elif rows %}
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Economy</th>
+            <th>Premium</th>
+            <th>Business</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+          <tr>
+            <td>{{ r.date }}</td>
+            <td class="{% if best_eco_miles and r.ECONOMY and r.ECONOMY.miles == best_eco_miles %}partner-best{% endif %}">{% if r.ECONOMY and r.ECONOMY.miles is not none %}{{ r.ECONOMY.miles }} mi{% if r.ECONOMY.tax %} · €{{ "%.2f"|format(r.ECONOMY.tax) }}{% endif %}{% else %}—{% endif %}</td>
+            <td>{% if r.PREMIUM and r.PREMIUM.miles is not none %}{{ r.PREMIUM.miles }} mi{% if r.PREMIUM.tax %} · €{{ "%.2f"|format(r.PREMIUM.tax) }}{% endif %}{% else %}—{% endif %}</td>
+            <td class="{% if best_biz_miles and r.BUSINESS and r.BUSINESS.miles == best_biz_miles %}partner-best-biz{% endif %}">{% if r.BUSINESS and r.BUSINESS.miles is not none %}{{ r.BUSINESS.miles }} mi{% if r.BUSINESS.tax %} · €{{ "%.2f"|format(r.BUSINESS.tax) }}{% endif %}{% else %}—{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    {% if month and origin and destination %}
+    <p class="table-hint" style="color:var(--color-text-muted);">No data for this month. <a href="/partner-awards/flyingblue?month={{ month }}&cabin={{ cabin }}">← Back to Flying Blue dashboard</a></p>
+    {% else %}
+    <p class="table-hint" style="color:var(--color-text-muted);">No calendar fares yet. Run calendar scan on remote runner and import:</p>
+    <p class="table-hint">Month grid: set Month (YYYY-MM) and Cabin, then Filter. Date list: set From/To or leave empty.</p>
+    <pre style="margin-top:0.5rem;font-size:0.8rem;">python runner.py open-dates-month --origin AMS --destination JNB --month 2026-03 --cabins BUSINESS
+python -m partner_awards.airfrance.import_folder --path ./outputs/AF</pre>
+    {% endif %}
+    {% endif %}
+  </div>
+</div>
+    {% if months_available and not month_grid %}
+    <p class="table-hint" style="margin-top:0.5rem;">Open month grid: {% for m in months_available %}<a href="?origin={{ origin }}&destination={{ destination }}&month={{ m }}&cabin={{ cabin }}">{{ m }}</a>{% if not loop.last %} · {% endif %}{% endfor %}</p>
+    {% endif %}
+<style>
+.partner-best { background: var(--color-bg-accent); }
+.partner-best-biz { background: var(--color-bg-accent); }
+.partner-best-day { background: #d4edda !important; color: #155724; }
+.partner-month-grid td { min-width: 4rem; padding: 0.25rem; vertical-align: top; }
+.partner-month-grid .day-num { font-weight: 600; }
+</style>
+<script>
+function paFetchTelegram(origin, dest, month, cabin) {
+  var status = document.getElementById('pa-telegram-status');
+  var out = document.getElementById('pa-telegram-output');
+  status.textContent = '…';
+  out.style.display = 'none';
+  fetch('/partner-awards/calendar/telegram?origin=' + encodeURIComponent(origin) + '&destination=' + encodeURIComponent(dest) + '&month=' + encodeURIComponent(month) + '&cabin=' + encodeURIComponent(cabin))
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.ok && d.text) {
+        out.textContent = d.text;
+        out.style.display = 'block';
+        status.textContent = '';
+      } else {
+        status.textContent = d.message || 'No data';
+      }
+    })
+    .catch(function(e) {
+      status.textContent = 'Error: ' + e.message;
+    });
+}
+</script>
+{% endblock %}

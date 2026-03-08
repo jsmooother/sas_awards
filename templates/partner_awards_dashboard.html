@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Partner Awards Dashboard – SAS Awards{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Partner Awards Dashboard</h1>
+  <p class="page-subtitle" style="margin:0;color:var(--color-text-secondary);font-size:1rem;">Best offers by date · {{ origin }} → {{ destination }}</p>
+  {% if ingest_types %}
+  <p class="page-subtitle" style="margin:0.5rem 0 0;font-size:0.875rem;">
+    Data source:
+    {% for t in ingest_types %}
+    <span class="partner-ingest-badge partner-ingest-{{ t }}">{{ t }}</span>
+    {% endfor %}
+  </p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <div class="card-inner">
+    <p class="table-hint" style="margin:0 0 1rem;">Lowest miles per cabin. Click date to load itineraries.</p>
+    {% if rows %}
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Economy</th>
+            <th>Premium</th>
+            <th>Business</th>
+            <th>Direct</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+          <tr class="partner-date-row" data-date="{{ r.date }}" style="cursor:pointer;">
+            <td>{{ r.date }}</td>
+            <td>{% if r.ECONOMY and r.ECONOMY.miles is not none %}{{ r.ECONOMY.miles }} mi{% if r.ECONOMY.tax %} · €{{ "%.2f"|format(r.ECONOMY.tax) }}{% endif %}{% else %}—{% endif %}</td>
+            <td>{% if r.PREMIUM and r.PREMIUM.miles is not none %}{{ r.PREMIUM.miles }} mi{% if r.PREMIUM.tax %} · €{{ "%.2f"|format(r.PREMIUM.tax) }}{% endif %}{% else %}—{% endif %}</td>
+            <td class="{% if best_biz_miles and r.BUSINESS and r.BUSINESS.miles == best_biz_miles %}partner-best-biz{% endif %}">{% if r.BUSINESS and r.BUSINESS.miles is not none %}{{ r.BUSINESS.miles }} mi{% if r.BUSINESS.tax %} · €{{ "%.2f"|format(r.BUSINESS.tax) }}{% endif %}{% else %}—{% endif %}</td>
+            <td>{% if r.direct %}✓{% else %}—{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="table-hint" style="color:var(--color-text-muted);">No best offers yet. Run fixture ingest or live test first.</p>
+    {% endif %}
+  </div>
+</div>
+
+<div id="partner-offers-for-date" class="card" style="margin-top:1rem;" hidden>
+  <div class="card-inner">
+    <h3 style="margin:0 0 1rem;">Offers for <span id="selected-date"></span></h3>
+    <div id="partner-offers-body"></div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const origin = '{{ origin }}';
+  const destination = '{{ destination }}';
+  document.querySelectorAll('.partner-date-row').forEach(function(row) {
+    row.addEventListener('click', async function() {
+      const date = this.dataset.date;
+      document.getElementById('selected-date').textContent = date;
+      const wrap = document.getElementById('partner-offers-for-date');
+      wrap.hidden = false;
+      const body = document.getElementById('partner-offers-body');
+      body.innerHTML = 'Loading…';
+      try {
+        const res = await fetch('/partner-awards/airfrance/offers?origin=' + encodeURIComponent(origin) + '&destination=' + encodeURIComponent(destination) + '&depart_date=' + encodeURIComponent(date) + '&limit=50');
+        const data = await res.json();
+        const offers = data.offers || [];
+        if (offers.length === 0) {
+          body.innerHTML = '<p>No offers for this date.</p>';
+        } else {
+          function fmtSeg(s) {
+            const c = s.marketingCarrier || s.operatingCarrier || '?';
+            const n = s.flightNumber || '';
+            return c + n + ' ' + (s.from || '') + '→' + (s.to || '');
+          }
+          function fmtCab(c) {
+            if (!c) return '—';
+            const p = [];
+            if (c.miles != null) p.push(c.miles + ' mi');
+            if (c.tax != null) p.push('€' + c.tax.toFixed(2));
+            return p.length ? p.join(' · ') : '—';
+          }
+          body.innerHTML = '<table><thead><tr><th>Itinerary</th><th>Stops</th><th>Economy</th><th>Premium</th><th>Business</th></tr></thead><tbody>' +
+            offers.map(function(o) {
+              const segs = (o.segments || []).map(fmtSeg).join(' · ');
+              return '<tr><td>' + segs + '</td><td>' + (o.stops || 0) + '</td><td>' + fmtCab(o.cabins && o.cabins.ECONOMY) + '</td><td>' + fmtCab(o.cabins && o.cabins.PREMIUM) + '</td><td>' + fmtCab(o.cabins && o.cabins.BUSINESS) + '</td></tr>';
+            }).join('') + '</tbody></table>';
+        }
+      } catch (e) {
+        body.innerHTML = '<p>Error: ' + e.message + '</p>';
+      }
+    });
+  });
+})();
+</script>
+<style>
+.partner-best-biz { background: var(--color-bg-accent); }
+.partner-date-row:hover { background: var(--color-bg-muted); }
+.partner-ingest-badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  margin-right: 0.25rem;
+  margin-bottom: 0.25rem;
+  font-size: 0.75rem;
+  border-radius: 4px;
+  background: var(--color-bg-muted);
+  color: var(--color-text-secondary);
+}
+.partner-ingest-fixture { background: #e8f4ea; color: #1b5e20; }
+.partner-ingest-har_import { background: #e3f2fd; color: #0d47a1; }
+.partner-ingest-playwright_live { background: #fff3e0; color: #e65100; }
+.partner-ingest-httpx_legacy { background: #fce4ec; color: #880e4f; }
+.partner-ingest-remote_runner { background: #e8eaf6; color: #1a237e; }
+</style>
+{% endblock %}

@@ -1,0 +1,382 @@
+{% extends "base.html" %}
+{% block title %}Flying Blue – Routes – SAS Awards{% endblock %}
+{% block content %}
+<div class="page-header">
+  <p class="page-subtitle" style="margin:0 0 0.25rem;font-size:0.9rem;"><a href="/partner-awards/flyingblue">← Flying Blue</a></p>
+  <h1 class="page-title">Routes</h1>
+  <p class="page-subtitle" style="margin:0;color:#86868b;font-size:1rem;">Watchlist · Connect · Run scan</p>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+<div class="card" style="margin-bottom:1rem;border-color:{% if messages[0][0] == 'success' %}var(--color-text-success){% else %}var(--color-text-danger,red){% endif %};">
+  <div class="card-inner">
+    {% for category, msg in messages %}
+    <p style="margin:0;color:{% if category == 'success' %}var(--color-text-success){% else %}var(--color-text-danger){% endif %};">{{ msg }}</p>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% endwith %}
+
+{% if validation_warning %}
+<div class="card" style="margin-bottom:1rem;border-color:var(--color-text-warning,orange);">
+  <div class="card-inner">
+    <p style="margin:0;font-size:0.9rem;color:var(--color-text-warning);">{{ validation_warning }}</p>
+  </div>
+</div>
+{% endif %}
+
+{% if blocked_until %}
+<div class="card" style="margin-bottom:1rem;border-color:var(--color-text-warning,orange);">
+  <div class="card-inner">
+    <p style="margin:0 0 0.5rem;"><strong>Fetching paused</strong> until {{ blocked_until[:19] }} due to cooldown. Clear to resume tests and scans.</p>
+    <form method="post" action="/partner-awards/flyingblue/clear-block" style="display:inline;">
+      <button type="submit" class="btn-secondary">Clear block & resume</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<div class="card" id="fb-connect-card">
+  <div class="card-inner">
+    <div class="fb-connect-header" id="fb-connect-header" role="button" tabindex="0" aria-expanded="true" aria-controls="fb-connect-body">
+      <h3 class="card-section-title" style="margin:0;display:flex;align-items:center;gap:0.5rem;">
+        <span class="fb-connect-caret" aria-hidden="true">▾</span>
+        Connect Flying Blue <span style="font-weight:400;color:#86868b;font-size:0.85rem;">(optional)</span>
+        <span id="fb-connect-status" class="fb-connect-status {% if has_cookies %}fb-connect-active{% else %}fb-connect-inactive{% endif %}">{% if has_cookies %}Active{% else %}Not configured{% endif %}</span>
+      </h3>
+    </div>
+    <div id="fb-connect-body" class="fb-connect-body">
+    <p class="table-hint" style="margin:0.75rem 0 0.5rem;">
+      Some routes (e.g. AMS→CPT) need login. To get the cURL:
+      <br>1. Log in to <a href="https://www.klm.se" target="_blank" rel="noopener">klm.se</a> and open the award calendar (Use your Miles).
+      <br>2. Open DevTools (F12) → Network tab. Trigger a search that returns data (e.g. AMS→CPT).
+      <br>3. Find the <code>SharedSearchLowestFareOffersForSearchQuery</code> request → Right‑click → Copy → Copy as cURL.
+      <br>4. Paste the full cURL below — we extract cookies automatically.
+    </p>
+    <form method="post" action="/partner-awards/flyingblue/cookies" id="fb-cookies-form">
+      <textarea name="cookie_string" id="fb-cookie-input" placeholder="Paste Cookie, Set-Cookie header(s), or full cURL – we'll extract the cookie." rows="4" style="width:100%;max-width:40rem;font-family:monospace;font-size:0.75rem;padding:0.5rem;border:1px solid rgba(0,0,0,0.12);border-radius:4px;resize:vertical;"></textarea>
+      <div style="margin-top:0.5rem;display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+        <button type="submit" class="btn-secondary">Save cookies</button>
+        <button type="button" class="btn-secondary" id="fb-cookies-clear">Clear</button>
+        <button type="button" class="btn-secondary" id="fb-cookies-test" title="Run AMS→CPT probe (~15s)">Test connection</button>
+        <span id="fb-cookies-configured" style="font-size:0.85rem;color:var(--color-text-success);{% if not has_cookies %}display:none;{% endif %}">✓ Cookies configured</span>
+        <span id="fb-cookies-save-status" style="font-size:0.85rem;margin-left:0.25rem;"></span>
+      </div>
+    </form>
+    <p id="fb-cookies-test-status" style="margin:0.5rem 0 0;font-size:0.85rem;display:none;"></p>
+    <p class="table-hint" style="margin:0.5rem 0 0;font-size:0.8rem;color:#86868b;">Test runs locally. AF/KLM often blocks private IPs; if Test fails, cookies are likely fine — run the worker on a VPS for real scans.</p>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:1rem;">
+  <div class="card-inner">
+    <h3 class="card-section-title">Run scan</h3>
+    {% set enabled_count = watch_routes|selectattr('enabled')|list|length %}
+    {% set est_min = [1, enabled_count * 3]|max %}
+    <p class="table-hint" style="margin:0 0 0.5rem;font-size:0.9rem;">
+      {% if enabled_count %}<strong>{{ enabled_count }}</strong> active route{{ 's' if enabled_count != 1 else '' }} · Est. ~{{ est_min }} min{% else %}No active routes · enable routes below to scan{% endif %}
+    </p>
+    <form method="post" action="/partner-awards/flyingblue/run-batch" style="margin-bottom:1rem;">
+      <label style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
+        <input type="checkbox" name="force_refresh" value="1">
+        <span>Force refresh (ignore 24h cooldown per route)</span>
+      </label>
+      <button type="submit" class="btn-primary" {% if not enabled_count %}disabled title="Enable at least one route below"{% endif %}>Start Run</button>
+    </form>
+    <p class="table-hint" style="margin:0 0 0.5rem;font-size:0.85rem;color:#86868b;">Availability changes quickly (cheap flights get booked). Run daily or every few days for useful data.</p>
+    <div id="job-status" class="table-hint" style="margin:0 0 0.5rem;padding:0.5rem;background:#f8f9fa;border-radius:4px;">
+      {% if latest_job %}
+      <strong>Run status:</strong> <span id="job-status-text">{{ latest_job.status }}</span> · <span id="job-progress-count">{{ latest_job.progress.done_tasks or 0 }}/{{ latest_job.progress.total_tasks or 0 }}</span><span id="job-timestamp">{% if latest_job.finished_at %} · Retrieved {{ latest_job.finished_at[:16].replace('T',' ') }}{% elif latest_job.started_at %} · Started {{ latest_job.started_at[:16].replace('T',' ') }}{% endif %}</span><span id="job-current-task" style="{% if not latest_job.progress.current_task %}display:none;{% endif %}">{% if latest_job.progress.current_task %} · {{ latest_job.progress.current_task }}{% endif %}</span>
+      · <a href="/partner-awards/jobs/{{ latest_job.id }}" id="job-detail-link">Detail</a>
+      {% if latest_job.last_error %}
+      <br><span id="job-error" style="color:var(--color-text-danger);font-size:0.85rem;">{{ latest_job.last_error }}</span>
+      {% else %}
+      <span id="job-error"></span>
+      {% endif %}
+      {% else %}
+      <span id="job-status-text">No run yet.</span> <span id="job-progress-count"></span><span id="job-timestamp"></span><span id="job-current-task"></span> <a href="#" id="job-detail-link" style="display:none;">Detail</a><span id="job-error"></span>
+      <p style="margin:0.5rem 0 0;font-size:0.9rem;">Click <strong>Start Run</strong> above to queue a job and run the worker in the background. To run manually: <code>python -m partner_awards.jobs_worker</code></p>
+      {% endif %}
+    </div>
+    <script>
+    (function() {
+      var statusEl = document.getElementById('job-status-text');
+      var countEl = document.getElementById('job-progress-count');
+      var taskEl = document.getElementById('job-current-task');
+      var linkEl = document.getElementById('job-detail-link');
+      var errorEl = document.getElementById('job-error');
+      var interval = setInterval(function() {
+        fetch('/partner-awards/flyingblue/status').then(function(r) { return r.json(); }).then(function(data) {
+          if (!data.job) return;
+          var j = data.job;
+          var p = j.progress || {};
+          statusEl.textContent = j.status;
+          countEl.textContent = (p.done_tasks || 0) + '/' + (p.total_tasks || 0);
+          var tsEl = document.getElementById('job-timestamp');
+          if (tsEl) {
+            var when = j.finished_at || j.started_at;
+            tsEl.textContent = when ? ' · ' + (j.finished_at ? 'Retrieved ' : 'Started ') + when.slice(0, 16).replace('T', ' ') : '';
+            tsEl.style.display = when ? '' : 'none';
+          }
+          if (taskEl) {
+            taskEl.textContent = p.current_task ? ' · ' + p.current_task : '';
+            taskEl.style.display = (p.current_task ? '' : 'none');
+          }
+          if (linkEl) {
+            linkEl.href = '/partner-awards/jobs/' + j.id;
+            linkEl.style.display = j.id ? '' : 'none';
+          }
+          if (errorEl) errorEl.textContent = j.last_error || '';
+          if (j.status === 'finished' || j.status === 'failed') clearInterval(interval);
+        }).catch(function() {});
+      }, 2500);
+    })();
+    </script>
+  </div>
+</div>
+
+<div class="card" style="margin-top:1rem;">
+  <div class="card-inner">
+    <h3 class="card-section-title">Watchlist</h3>
+    <p class="table-hint" style="margin:0 0 0.5rem;">Add, enable, disable, or remove routes.</p>
+    <div class="toolbar filters" style="margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem;">
+      <form method="post" action="/partner-awards/watchlist/add" style="display:inline-flex;align-items:center;gap:0.5rem;">
+        <input type="hidden" name="program" value="flyingblue">
+        <label>
+          <select name="origin" required>
+            <option value="AMS">AMS</option>
+            <option value="PAR">PAR</option>
+          </select>
+        </label>
+        <input type="text" name="destination" placeholder="Dest (e.g. JNB)" maxlength="4" style="width:5rem;">
+        <button type="submit" class="btn-secondary">Add route</button>
+      </form>
+      <form method="post" action="/partner-awards/watchlist/seed-recommended" style="display:inline;">
+        <button type="submit" class="btn-secondary" title="Add 20 pre-defined routes (AMS/PAR→JNB, CPT, BKK, etc.) to your watchlist. Does not run a scan — use Start run after.">Populate routes from template</button>
+      </form>
+    </div>
+    {% if watch_routes %}
+    <div class="table-wrapper watchlist-table-wrap">
+      <table class="watchlist-table">
+        <thead>
+          <tr>
+            <th>Origin</th>
+            <th>Destination</th>
+            <th>Enabled</th>
+            <th>Last scan</th>
+            <th>Coverage <span class="watchlist-th-hint" title="Days with data in next 365 days from today / 365">(next 365d)</span></th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in watch_routes %}
+          <tr>
+            <td>{{ r.origin }}</td>
+            <td>{{ r.destination }}</td>
+            <td>
+              <form method="post" action="/partner-awards/watchlist/toggle" style="display:inline;">
+                <input type="hidden" name="id" value="{{ r.id }}">
+                <input type="hidden" name="enabled" value="{{ '0' if r.enabled else '1' }}">
+                <button type="submit" class="toggle-switch {% if r.enabled %}toggle-on{% endif %}" title="{{ 'On – tap to turn off' if r.enabled else 'Off – tap to turn on' }}" aria-label="{{ 'On' if r.enabled else 'Off' }}"></button>
+              </form>
+            </td>
+            <td>{{ r.last_scan_at[:16] if r.last_scan_at else '—' }}</td>
+            <td title="Days with data in next 365 days from today / 365">{{ r.coverage_days }}/{{ r.coverage_total }}</td>
+            <td>
+              <form method="post" action="/partner-awards/watchlist/remove" style="display:inline;">
+                <input type="hidden" name="id" value="{{ r.id }}">
+                <button type="submit" class="btn-remove" title="Remove route" onclick="return confirm('Are you sure you want to remove this route?');">Remove</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="table-hint" style="color:#86868b;">No routes in watchlist. Add origin and destination above.</p>
+    {% endif %}
+  </div>
+</div>
+
+{% if suggested_routes %}
+<div class="card" style="margin-top:1rem;">
+  <div class="card-inner">
+    <h3 class="card-section-title">Suggested routes</h3>
+    <p class="table-hint" style="margin:0 0 0.5rem;">Top destinations by best miles and green days (from discovery).</p>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Origin</th>
+            <th>Destination</th>
+            <th>Best miles</th>
+            <th>Green days</th>
+            <th>Coverage</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in suggested_routes %}
+          <tr>
+            <td>{{ r.origin }}</td>
+            <td>{{ r.destination }}</td>
+            <td>{{ r.best_miles }}</td>
+            <td>{{ r.green_days_count }}</td>
+            <td>{{ r.coverage_days }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<p style="margin-top:1.5rem;font-size:0.8rem;color:#86868b;">
+  <a href="/partner-awards/flyingblue/ingest">Admin: Ingest</a> · <a href="/partner-awards/calendar">Calendar</a> · <a href="/partner-awards/jobs">Batch Jobs</a>
+</p>
+
+<script>
+(function() {
+  var form = document.getElementById('fb-cookies-form');
+  var input = document.getElementById('fb-cookie-input');
+  var clearBtn = document.getElementById('fb-cookies-clear');
+  var testBtn = document.getElementById('fb-cookies-test');
+  var status = document.getElementById('fb-cookies-test-status');
+  var saveStatus = document.getElementById('fb-cookies-save-status');
+  var configuredSpan = document.getElementById('fb-cookies-configured');
+  var connectHeader = document.getElementById('fb-connect-header');
+  var connectBody = document.getElementById('fb-connect-body');
+  var connectCard = document.getElementById('fb-connect-card');
+
+  function submitCookiesViaFetch(cookieValue, done) {
+    var fd = new FormData();
+    fd.append('cookie_string', cookieValue || '');
+    fetch(form.action, {
+      method: 'POST',
+      body: fd,
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    }).then(function(r) { return r.json(); }).then(function(d) {
+      if (saveStatus) {
+        saveStatus.textContent = d.ok ? d.message : (d.message || 'Error');
+        saveStatus.style.color = d.ok ? 'var(--color-text-success)' : 'var(--color-text-danger)';
+        saveStatus.style.display = 'inline';
+        if (d.ok && configuredSpan) configuredSpan.style.display = d.has_cookies ? 'inline' : 'none';
+        var statusBadge = document.getElementById('fb-connect-status');
+        if (d.ok && statusBadge) {
+          statusBadge.textContent = d.has_cookies ? 'Active' : 'Not configured';
+          statusBadge.className = 'fb-connect-status ' + (d.has_cookies ? 'fb-connect-active' : 'fb-connect-inactive');
+        }
+        setTimeout(function() { saveStatus.textContent = ''; saveStatus.style.display = ''; }, 3000);
+      }
+      if (done) done(d);
+    }).catch(function(e) {
+      if (saveStatus) {
+        saveStatus.textContent = 'Failed: ' + (e.message || 'Request failed');
+        saveStatus.style.color = 'var(--color-text-danger)';
+        saveStatus.style.display = 'inline';
+        setTimeout(function() { saveStatus.textContent = ''; saveStatus.style.display = ''; }, 5000);
+      }
+      if (done) done({ ok: false });
+    });
+  }
+
+  if (form) {
+    form.onsubmit = function(e) {
+      e.preventDefault();
+      submitCookiesViaFetch(input ? input.value : '');
+    };
+  }
+  if (clearBtn && input && form) {
+    clearBtn.onclick = function() {
+      input.value = '';
+      submitCookiesViaFetch('');
+    };
+  }
+  if (testBtn && status) {
+    testBtn.onclick = function() {
+      testBtn.disabled = true;
+      status.textContent = 'Testing AMS→CPT… (~15s)';
+      status.style.display = 'block';
+      status.style.color = '';
+      fetch('/partner-awards/flyingblue/cookies/test', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          status.textContent = d.ok ? '✓ ' + d.message : '✗ ' + (d.message || 'Failed');
+          status.style.color = d.ok ? 'var(--color-text-success)' : 'var(--color-text-danger)';
+        })
+        .catch(function(e) {
+          status.textContent = '✗ ' + (e.message || 'Request failed');
+          status.style.color = 'var(--color-text-danger)';
+        })
+        .finally(function() { testBtn.disabled = false; });
+    };
+  }
+
+  var collapsed = localStorage.getItem('fb-connect-collapsed') === '1';
+  if (connectBody) connectBody.style.display = collapsed ? 'none' : 'block';
+  if (connectCard) connectCard.classList.toggle('fb-connect-collapsed', collapsed);
+  if (connectHeader) {
+    connectHeader.querySelector('.fb-connect-caret').textContent = collapsed ? '▸' : '▾';
+    connectHeader.setAttribute('aria-expanded', String(!collapsed));
+    connectHeader.addEventListener('click', function() {
+      collapsed = !collapsed;
+      connectBody.style.display = collapsed ? 'none' : 'block';
+      connectCard.classList.toggle('fb-connect-collapsed', collapsed);
+      connectHeader.querySelector('.fb-connect-caret').textContent = collapsed ? '▸' : '▾';
+      connectHeader.setAttribute('aria-expanded', String(!collapsed));
+      localStorage.setItem('fb-connect-collapsed', collapsed ? '1' : '0');
+    });
+    connectHeader.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); connectHeader.click(); }
+    });
+  }
+
+  document.addEventListener('submit', function(e) {
+    var form = e.target;
+    if (form.method === 'post' && form.action && form.action.indexOf('/partner-awards/watchlist/toggle') !== -1) {
+      e.preventDefault();
+      var btn = form.querySelector('button.toggle-switch');
+      var fd = new FormData(form);
+      fetch(form.action, { method: 'POST', body: fd, redirect: 'manual' })
+        .then(function(res) {
+          if (res.type === 'opaqueredirect' || res.status === 0 || res.status === 302) {
+            btn.classList.toggle('toggle-on');
+            var isOn = btn.classList.contains('toggle-on');
+            btn.title = isOn ? 'On – tap to turn off' : 'Off – tap to turn on';
+            btn.setAttribute('aria-label', isOn ? 'On' : 'Off');
+            var enabledInput = form.querySelector('input[name="enabled"]');
+            if (enabledInput) enabledInput.value = isOn ? '1' : '0';
+          }
+        })
+        .catch(function() { form.submit(); });
+    }
+  });
+})();
+</script>
+<style>
+.fb-connect-header { cursor: pointer; padding: 0.25rem 0; user-select: none; }
+.fb-connect-header:hover { opacity: 0.85; }
+.fb-connect-caret { font-size: 0.75rem; color: #86868b; transition: transform 0.2s; }
+.fb-connect-status { font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.04em; }
+.fb-connect-active { background: rgba(52, 199, 89, 0.15); color: #34c759; }
+.fb-connect-inactive { background: rgba(0,0,0,0.06); color: #86868b; }
+.btn-remove { padding: 0.35rem 0.75rem; font-size: 0.8125rem; font-weight: 500; line-height: 1.2; color: #666; background: none; border: none; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; -webkit-appearance: none; appearance: none; min-height: 28px; transition: opacity 0.2s, color 0.2s, transform 0.1s; }
+.btn-remove:hover { color: #111; }
+.btn-remove:active { transform: scale(0.97); }
+.watchlist-table-wrap { font-size: 0.8125rem; }
+.watchlist-table { width: 100%; border-collapse: collapse; font-size: inherit; }
+.watchlist-table th, .watchlist-table td { padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid rgba(0,0,0,0.06); vertical-align: middle; }
+.watchlist-table th { font-weight: 600; color: #515154; font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.watchlist-table .watchlist-th-hint { font-weight: normal; color: #86868b; font-size: 0.75rem; }
+.toggle-switch { display: inline-block; position: relative; width: 32px; height: 18px; min-width: 32px; min-height: 18px; padding: 0; border: none; border-radius: 999px; cursor: pointer; background: #e5e5ea; -webkit-appearance: none; appearance: none; transition: background 0.2s; flex-shrink: 0; }
+.toggle-switch:hover { background: #d1d1d6; }
+.toggle-switch.toggle-on { background: #34c759; }
+.toggle-switch.toggle-on:hover { background: #2db84e; }
+.toggle-switch::after { content: ''; position: absolute; left: 2px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.2); transition: transform 0.2s; }
+.toggle-switch.toggle-on::after { transform: translate(14px, -50%); }
+</style>
+{% endblock %}

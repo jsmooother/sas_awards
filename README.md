@@ -68,6 +68,15 @@ python scripts/verify_telegram.py
 ```
 (With token in env or `.env` – confirms the bot is reachable.)
 
+## Partner Awards (Air France / KLM)
+
+A separate module for Flying Blue award availability. Uses `~/sas_awards/partner_awards.sqlite`.
+
+- **Playwright** – For live fetch, install Chromium: `python -m playwright install chromium`
+- **Manual import** – Upload HAR or JSON from Chrome DevTools (Network → Save all as HAR with content)
+
+See [partner_awards/airfrance/README.md](partner_awards/airfrance/README.md) for full setup and API.
+
 ## Project layout
 
 | File | Description |

@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Job {{ job.id if job else '?' }} – SAS Awards{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Job {{ job.id if job else '?' }}</h1>
+  <p class="page-subtitle" style="margin:0;color:var(--color-text-secondary);font-size:1rem;">
+    <a href="/partner-awards/jobs">← All jobs</a> · <a href="/partner-awards/flyingblue">Flying Blue</a>
+  </p>
+</div>
+
+{% if job %}
+<div class="card" style="margin-bottom:1rem;">
+  <div class="card-inner">
+    <p><strong>Status:</strong> {{ job.status }} · <strong>Type:</strong> {{ job.job_type }}</p>
+    <p><strong>Created:</strong> {{ job.created_at }} · <strong>Started:</strong> {{ job.started_at or '—' }} · <strong>Finished:</strong> {{ job.finished_at or '—' }}</p>
+    {% set p = job.progress %}
+    <p><strong>Progress:</strong> {{ p.done_tasks or 0 }}/{{ p.total_tasks or 0 }}{% if job.finished_at %} · Retrieved {{ job.finished_at[:16].replace('T',' ') }}{% endif %}{% if p.current_task %} · Current: {{ p.current_task }}{% endif %}</p>
+    {% if job.last_error %}
+    <p style="color:var(--color-text-danger);"><strong>Last error:</strong> {{ job.last_error }}</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-inner">
+    <h3 class="card-section-title">Tasks</h3>
+    {% if tasks %}
+    <div class="table-wrapper" style="max-height:400px;overflow-y:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Route</th>
+            <th>Month</th>
+            <th>Cabin</th>
+            <th>Status</th>
+            <th>Error</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in tasks %}
+          <tr>
+            <td>{{ t.origin }}→{{ t.destination }}</td>
+            <td>{{ t.month }}</td>
+            <td>{{ t.cabin }}</td>
+            <td>{{ t.status }}</td>
+            <td style="font-size:0.8rem;">{{ t.last_error or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="table-hint" style="color:var(--color-text-muted);">No tasks.</p>
+    {% endif %}
+  </div>
+</div>
+{% else %}
+<div class="card">
+  <div class="card-inner">
+    <p class="table-hint" style="color:var(--color-text-muted);">Job not found.</p>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

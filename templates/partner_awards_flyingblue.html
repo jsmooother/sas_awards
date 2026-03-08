@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+{% block title %}Partner Awards – Flying Blue – SAS Awards{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Flying Blue</h1>
+  <p class="page-subtitle" style="margin:0;color:#86868b;font-size:1rem;">Calendar · Weekend</p>
+  {% if data_freshness %}
+  <div class="data-freshness-strip" style="margin-top:0.5rem;padding:0.4rem 0.6rem;background:var(--color-bg-secondary,#f5f5f5);border-radius:4px;font-size:0.8rem;">
+    {% if data_freshness.last_scan_at %}
+    <span title="Last completed scan">Last scan: {{ data_freshness.last_scan_at[:16] }}{% if data_freshness.last_scan_host %} · {{ data_freshness.last_scan_host }}{% endif %}</span>
+    <span style="margin:0 0.5rem;">|</span>
+    {% endif %}
+    <span>Coverage: {{ data_freshness.routes_24h }}/{{ data_freshness.total_routes }} routes in 24h</span>
+    <span style="margin:0 0.5rem;">|</span>
+    <span>{{ month }}: {{ data_freshness.month_days_captured }}/{{ data_freshness.month_days_total }} days</span>
+  </div>
+  {% endif %}
+</div>
+
+<div class="report-tabs" style="display:flex;gap:0;margin-bottom:1.5rem;background:rgba(0,0,0,.04);border-radius:10px;padding:4px;width:fit-content;flex-wrap:wrap;">
+  <a href="?tab=calendar&cabin={{ cabin }}&route={{ route_filter or '' }}" class="{% if tab == 'calendar' %}active{% endif %}" style="padding:.5rem 1rem;font-size:.85rem;font-weight:500;color:#515154;text-decoration:none;border-radius:8px;transition:all .2s;white-space:nowrap;">Calendar</a>
+  <a href="?tab=windows&month={{ month }}&cabin={{ cabin }}&win_origin={{ win_origin or 'AMS' }}&win_dest={{ win_dest or '' }}&win_trip={{ win_trip or 'weekend' }}" class="{% if tab == 'windows' %}active{% endif %}" style="padding:.5rem 1rem;font-size:.85rem;font-weight:500;color:#515154;text-decoration:none;border-radius:8px;transition:all .2s;white-space:nowrap;">Weekend</a>
+</div>
+<style>
+  .report-tabs a:hover { color: #1d1d1f; }
+  .report-tabs a.active { background: #fff; color: #007aff; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+</style>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+<div class="card" style="margin-bottom:1rem;border-color:{% if messages[0][0] == 'success' %}var(--color-text-success){% else %}var(--color-text-danger,red){% endif %};">
+  <div class="card-inner">
+    {% for category, msg in messages %}
+    <p style="margin:0;color:{% if category == 'success' %}var(--color-text-success){% else %}var(--color-text-danger){% endif %};">{{ msg }}</p>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% endwith %}
+
+{% if validation_warning %}
+<div class="card" style="margin-bottom:1rem;border-color:var(--color-text-warning,orange);">
+  <div class="card-inner">
+    <p style="margin:0;font-size:0.9rem;color:var(--color-text-warning);">{{ validation_warning }}</p>
+  </div>
+</div>
+{% endif %}
+
+{% if tab == 'calendar' %}
+{# Calendar tab: 365-day year view. Route (top) + Cabin + Year #}
+<div class="card">
+  <div class="card-inner">
+    <h3 class="card-section-title">365-day calendar</h3>
+    <form method="get" action="" class="toolbar filters" style="margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem;">
+      <input type="hidden" name="tab" value="calendar">
+      {% if calendar_route_options %}
+      <label>
+        Route
+        <select name="route" onchange="this.form.submit()" style="width:11rem;">
+          {% for val, lbl in calendar_route_options %}
+          <option value="{{ val }}" {% if route_filter == val %}selected{% endif %}>{{ lbl }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      {% endif %}
+      <label>
+        Cabin
+        <select name="cabin" onchange="this.form.submit()">
+          <option value="BUSINESS" {% if cabin == 'BUSINESS' %}selected{% endif %}>Business</option>
+          <option value="PREMIUM" {% if cabin == 'PREMIUM' %}selected{% endif %}>Premium Economy</option>
+        </select>
+      </label>
+    </form>
+    {% if flyingblue_year_calendar %}
+    <p class="table-hint table-hint-compact" style="margin:0 0 0.75rem;">
+      Daily miles ({{ route_filter|replace('-', '→') }}). Today + 1 year.
+    </p>
+    <p class="table-hint" style="margin:0 0 0.5rem;font-size:0.8rem;">Legend: <span class="hm-legend hm-legend-green">lowest</span> <span class="hm-legend hm-legend-blue">average</span> <span class="hm-legend hm-legend-red">high</span> <span class="hm-legend hm-legend-empty">no data</span></p>
+    <style>
+      .fb-year-cal-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 1rem; }
+      .fb-year-cal-grid .month-card { min-width: 0; padding: 0.6rem; }
+      .fb-year-cal-grid .month-weekday-headers { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.25rem; margin-bottom: 0.25rem; }
+      .fb-year-cal-grid .calendar-weekday-header { font-size: 0.65rem; font-weight: 600; color: var(--color-text-secondary); text-align: center; }
+      .fb-year-cal-grid .month-days { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.25rem; }
+      .fb-year-cal-grid .calendar-day { min-height: 38px; padding: 0.2rem 0.1rem; color: #000; }
+      .fb-year-cal-grid .calendar-day-blank { border: none; background: transparent; min-height: 38px; }
+      .fb-year-cal-grid .calendar-day-num { font-size: 0.7rem; }
+      .fb-year-cal-grid .calendar-day-badge { font-size: 0.7rem; }
+      .fb-year-cal-grid .calendar-day-badge,
+      .fb-year-cal-grid .calendar-day-badge-out { background: transparent !important; color: #000 !important; }
+      /* Green = lowest, blue = average (near min up to ~2.5×), light red = high. Black text. */
+      .fb-year-cal-grid .calendar-day.hm-min { background: #c8e6c9 !important; color: #000 !important; }
+      .fb-year-cal-grid .calendar-day.hm-low { background: #bbdefb !important; color: #000 !important; }
+      .fb-year-cal-grid .calendar-day.hm-mid { background: #90caf9 !important; color: #000 !important; }
+      .fb-year-cal-grid .calendar-day.hm-high { background: #ffcdd2 !important; color: #000 !important; }
+      .fb-year-cal-grid .calendar-day.hm-empty { background: #eeeeee !important; color: #000 !important; }
+      .hm-legend-green { background: #c8e6c9; color: #000; }
+      .hm-legend-blue { background: #90caf9; color: #000; }
+      .hm-legend-red { background: #ffcdd2; color: #000; }
+      .hm-legend-empty { background: #eeeeee; color: #000; }
+    </style>
+    <div class="year-cal-grid fb-year-cal-grid">
+      {% for month in flyingblue_year_calendar %}
+      <section class="month-card">
+        <div class="month-label">{{ month.label }}</div>
+        <div class="month-weekday-headers">
+          {% for h in month.weekday_headers %}
+          <span class="calendar-weekday-header">{{ h }}</span>
+          {% endfor %}
+        </div>
+        <div class="month-days">
+          {% for week in month.weeks %}
+          {% for cell in week %}
+          {% if cell %}
+          <div class="calendar-day {{ cell.css_class }} {% if cell.has_data %}has-data{% endif %} {% if cell.is_today %}is-today{% endif %}">
+            <div class="calendar-day-num">{{ cell.day }}</div>
+            {% if cell.has_data %}
+            <span class="calendar-day-badge calendar-day-badge-out">{{ cell.display }}</span>
+            {% endif %}
+          </div>
+          {% else %}
+          <div class="calendar-day calendar-day-blank"></div>
+          {% endif %}
+          {% endfor %}
+          {% endfor %}
+        </div>
+      </section>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="table-hint" style="color:var(--color-text-muted);">
+      {% if not watch_routes %}
+      No watchlist routes. <a href="?tab=routes">Add routes</a> in the Routes tab first.
+      {% else %}
+      No data. Add routes and run scan.
+      {% endif %}
+    </p>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% if tab == 'windows' %}
+{# Weekend tab: round-trip search #}
+<div class="card">
+  <div class="card-inner">
+    <h3 class="card-section-title">Weekend</h3>
+    <p class="table-hint" style="margin:0 0 0.75rem;">Find outbound + inbound pairs within trip length. Excellent = both ≤1.15× route min; Good = one ≤ min.</p>
+    <form method="get" action="" class="toolbar filters" style="margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem;">
+      <input type="hidden" name="tab" value="windows">
+      <label>
+        Origin
+        {% if win_origins %}
+        <select name="win_origin" onchange="this.form.submit()" style="width:5rem;">
+          {% for o in win_origins %}
+          <option value="{{ o }}" {% if win_origin == o %}selected{% endif %}>{{ o }}</option>
+          {% endfor %}
+        </select>
+        {% else %}
+        <input type="text" name="win_origin" value="{{ win_origin }}" placeholder="AMS" maxlength="4" style="width:4rem;">
+        {% endif %}
+      </label>
+      <label>
+        Destination
+        {% if win_dests_for_origin %}
+        <select name="win_dest" style="width:5rem;">
+          {% for d in win_dests_for_origin %}
+          <option value="{{ d }}" {% if win_dest == d %}selected{% endif %}>{{ d }}</option>
+          {% endfor %}
+        </select>
+        {% else %}
+        <input type="text" name="win_dest" value="{{ win_dest }}" placeholder="JNB" maxlength="4" style="width:4rem;">
+        {% endif %}
+      </label>
+      <label>
+        Cabin
+        <select name="cabin">
+          <option value="BUSINESS" {% if cabin == 'BUSINESS' %}selected{% endif %}>Business</option>
+          <option value="PREMIUM" {% if cabin == 'PREMIUM' %}selected{% endif %}>Premium Economy</option>
+        </select>
+      </label>
+      <label>
+        Month
+        <select name="month" style="width:10rem;">
+          {% for m in months_all %}
+          <option value="{{ m }}" {% if month == m %}selected{% endif %}>{{ m }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        Trip length
+        <select name="win_trip" id="win-trip-select">
+          <option value="weekend" {% if win_trip == 'weekend' %}selected{% endif %}>Weekend (2–4 nights)</option>
+          <option value="5-7" {% if win_trip == '5-7' %}selected{% endif %}>5–7 days</option>
+          <option value="custom" {% if win_trip == 'custom' %}selected{% endif %}>Custom (3–10)</option>
+        </select>
+      </label>
+      <span id="win-custom-range" style="display:{% if win_trip == 'custom' %}inline-flex{% else %}none{% endif %};;align-items:center;gap:0.25rem;">
+        <input type="number" name="win_nights_min" value="{{ win_nights_min }}" min="3" max="10" style="width:3rem;">
+        <span>–</span>
+        <input type="number" name="win_nights_max" value="{{ win_nights_max }}" min="3" max="10" style="width:3rem;"> nights
+      </span>
+      <button type="submit" class="btn-primary">Search</button>
+    </form>
+    {% if windows_pairs %}
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Out</th>
+            <th>In</th>
+            <th>Nights</th>
+            <th>Out miles</th>
+            <th>In miles</th>
+            <th>Total</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in windows_pairs %}
+          <tr class="{% if p.is_excellent %}windows-excellent{% elif p.is_good %}windows-good{% endif %}">
+            <td>{{ p.out_date }}</td>
+            <td>{{ p.in_date }}</td>
+            <td>{{ p.nights }}</td>
+            <td>{{ p.out_miles }}</td>
+            <td>{{ p.in_miles }}</td>
+            <td>{{ p.total_miles }}</td>
+            <td>{% if p.is_excellent %}Excellent{% elif p.is_good %}Good{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% elif win_dest %}
+    <p class="table-hint" style="color:var(--color-text-muted);">No round-trip pairs found for {{ win_origin }}↔{{ win_dest }} in {{ month }}. Try another month or route.</p>
+    {% else %}
+    <p class="table-hint" style="color:var(--color-text-muted);">Enter origin and destination above, then click Search.</p>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<p style="margin-top:1.5rem;font-size:0.8rem;color:var(--color-text-muted);">
+  <a href="/partner-awards/flyingblue/ingest">Admin: Ingest</a> · <a href="/partner-awards/calendar">Calendar</a> · <a href="/partner-awards/jobs">Batch Jobs</a>
+</p>
+
+<script>
+(function() {
+  var tripSelect = document.getElementById('win-trip-select');
+  var customRange = document.getElementById('win-custom-range');
+  if (tripSelect && customRange) {
+    tripSelect.addEventListener('change', function() {
+      customRange.style.display = tripSelect.value === 'custom' ? 'inline-flex' : 'none';
+    });
+  }
+})();
+</script>
+<style>
+.report-tabs a:hover { color: #1d1d1f; }
+.report-tabs a.active { background: #fff; color: #007aff; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.heatmap-table { font-size:0.8rem; border-collapse:collapse; }
+.heatmap-table th, .heatmap-table td { padding:0.15rem 0.35rem; border:1px solid rgba(0,0,0,0.1); text-align:center; }
+.hm-route-col { min-width:6rem; text-align:left; position:sticky; left:0; background:#fff; z-index:1; }
+.hm-day-col { min-width:2.5rem; font-weight:500; }
+.hm-cell { min-width:2.5rem; }
+.hm-cell a { text-decoration:none; color:inherit; }
+.hm-min { background:#d4edda !important; color:#155724; }
+.hm-low { background:#e8f5e9; }
+.hm-mid { background:#fff9c4; }
+.hm-high { background:#ffe0b2; }
+.hm-empty { background:#f5f5f5; color:#999; }
+.hm-no-data-badge { margin-left:0.25rem; opacity:0.7; font-size:0.7rem; }
+.hm-legend { padding:0.1rem 0.4rem; margin-right:0.5rem; border-radius:2px; font-size:0.75rem; }
+.windows-excellent { background: #d4edda !important; }
+.windows-good { background: #e8f5e9; }
+</style>
+{% endblock %}

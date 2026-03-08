@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+{% block title %}Partner Awards – SAS Awards{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Partner Awards</h1>
+  <p class="page-subtitle" style="margin:0;color:var(--color-text-secondary);font-size:1rem;">Air France / KLM (Flying Blue)</p>
+</div>
+
+<div class="card">
+  <div class="card-inner">
+    <form id="partner-awards-form" class="toolbar filters">
+      <div class="filters">
+        <label>
+          Origin
+          <input type="text" name="origin" value="PAR" placeholder="e.g. PAR">
+        </label>
+        <label>
+          Destination
+          <input type="text" name="destination" value="JNB" placeholder="e.g. JNB">
+        </label>
+        <label>
+          Depart date
+          <input type="date" name="depart_date" value="2026-02-27">
+        </label>
+        <label>
+          Cabin requested
+          <select name="cabin_requested">
+            <option value="ECONOMY" selected>Economy</option>
+            <option value="PREMIUM">Premium</option>
+            <option value="BUSINESS">Business</option>
+            <option value="FIRST">First</option>
+          </select>
+        </label>
+      </div>
+      <div class="filters" style="margin-top:1rem;align-items:center;">
+        <label class="tick-option" style="margin:0;">
+          <input type="radio" name="mode" value="fixture" checked> Fixture
+        </label>
+        <label class="tick-option" style="margin:0;">
+          <input type="radio" name="mode" value="live-playwright"> Live (Playwright)
+        </label>
+        <label class="tick-option" style="margin:0;">
+          <input type="radio" name="mode" value="live"> Live (httpx legacy)
+        </label>
+        <button type="button" id="btn-run-ingest" class="btn-secondary">Run ingest</button>
+        <button type="button" id="btn-load-offers">Load offers</button>
+      </div>
+    </form>
+
+    <div class="table-hint" style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--color-border-subtle);">
+      <strong>Manual Import (HAR/JSON)</strong>
+    </div>
+    <form id="partner-import-form" class="toolbar filters" style="margin-top:0.5rem;">
+      <div class="filters">
+        <label>
+          File (.json or .har)
+          <input type="file" name="file" accept=".json,.har" required>
+        </label>
+        <label>
+          Origin
+          <input type="text" name="origin" value="PAR">
+        </label>
+        <label>
+          Destination
+          <input type="text" name="destination" value="JNB">
+        </label>
+        <label>
+          Depart date
+          <input type="date" name="depart_date" value="2026-02-27">
+        </label>
+        <label>
+          Cabin
+          <select name="cabin_requested">
+            <option value="ECONOMY" selected>Economy</option>
+            <option value="PREMIUM">Premium</option>
+            <option value="BUSINESS">Business</option>
+            <option value="FIRST">First</option>
+          </select>
+        </label>
+      </div>
+      <div class="filters" style="margin-top:0.5rem;">
+        <button type="submit" id="btn-import" class="btn-secondary">Import &amp; Ingest</button>
+      </div>
+    </form>
+    <div id="partner-import-result" class="table-hint" style="margin-top:0.5rem;font-size:0.875rem;" hidden></div>
+
+    <div id="partner-live-result" class="table-hint" style="margin-top:1rem;font-size:0.875rem;" hidden></div>
+    <div id="partner-status" class="table-hint" style="margin-top:0.5rem;" hidden></div>
+    <div id="partner-offers-wrap" class="table-wrapper" style="margin-top:1rem;" hidden>
+      <table class="partner-offers-table">
+        <thead>
+          <tr>
+            <th>Itinerary</th>
+            <th>Stops</th>
+            <th>Economy</th>
+            <th>Premium</th>
+            <th>Business</th>
+          </tr>
+        </thead>
+        <tbody id="partner-offers-body">
+        </tbody>
+      </table>
+    </div>
+    <div id="partner-empty" class="table-hint" style="margin-top:1rem;color:var(--color-text-muted);" hidden>
+      No offers yet. Run "Run test ingest (fixture)" first, then "Load offers".
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const form = document.getElementById('partner-awards-form');
+  const btnIngest = document.getElementById('btn-run-ingest');
+  const btnLoad = document.getElementById('btn-load-offers');
+  const statusEl = document.getElementById('partner-status');
+  const liveResultEl = document.getElementById('partner-live-result');
+  const wrapEl = document.getElementById('partner-offers-wrap');
+  const bodyEl = document.getElementById('partner-offers-body');
+  const emptyEl = document.getElementById('partner-empty');
+
+  function getParams() {
+    return {
+      origin: form.origin.value || 'PAR',
+      destination: form.destination.value || 'JNB',
+      depart_date: form.depart_date.value || '2026-02-27',
+      cabin_requested: form.cabin_requested.value || 'ECONOMY'
+    };
+  }
+
+  function showStatus(msg, isError) {
+    statusEl.hidden = false;
+    statusEl.textContent = msg;
+    statusEl.style.color = isError ? 'var(--color-text-danger)' : 'var(--color-text-primary)';
+  }
+
+  function formatSegment(seg) {
+    const carrier = seg.marketingCarrier || seg.operatingCarrier || '?';
+    const num = seg.flightNumber || '';
+    const fromTo = [seg.from, seg.to].filter(Boolean).join('→');
+    const dep = seg.departure ? seg.departure.slice(11, 16) : '';
+    return carrier + num + ' ' + fromTo + (dep ? ' ' + dep : '');
+  }
+
+  function formatCabin(cabin) {
+    if (!cabin) return '—';
+    const parts = [];
+    if (cabin.miles != null) parts.push(cabin.miles.toLocaleString() + ' mi');
+    if (cabin.tax != null) parts.push('€' + cabin.tax.toFixed(2));
+    if (cabin.seats_available != null) parts.push(cabin.seats_available + ' seats');
+    return parts.length ? parts.join(' · ') : '—';
+  }
+
+  btnIngest.addEventListener('click', async function() {
+    const p = getParams();
+    const mode = form.querySelector('input[name="mode"]:checked').value;
+    const isLive = mode === 'live' || mode === 'live-playwright';
+    const endpoint = mode === 'live-playwright' ? '/partner-awards/airfrance/live-test-playwright'
+      : mode === 'live' ? '/partner-awards/airfrance/live-test'
+      : '/partner-awards/airfrance/test-ingest';
+    const body = isLive ? { origin: p.origin, destination: p.destination, depart_date: p.depart_date, cabin: p.cabin_requested } : p;
+
+    btnIngest.disabled = true;
+    liveResultEl.hidden = true;
+    showStatus(mode === 'live-playwright' ? 'Playwright live fetch…' : isLive ? 'Calling live API (httpx)…' : 'Ingesting from fixture…');
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (data.ok) {
+        showStatus('Inserted ' + data.inserted_offer_count + ' offers.');
+        if (isLive) {
+          liveResultEl.hidden = false;
+          const parts = mode === 'live-playwright'
+            ? [
+                'homepage: ' + (data.homepage_status ?? '—') + ' (' + (data.homepage_timing_ms ?? '—') + 'ms)',
+                'create_context: ' + (data.create_context_status ?? '—') + ' (' + (data.create_context_timing_ms ?? '—') + 'ms)',
+                'offers: ' + (data.offers_status ?? '—') + ' (' + (data.offers_timing_ms ?? '—') + 'ms)',
+                'inserted: ' + data.inserted_offer_count,
+                'in_db: ' + (data.offers_in_db_for_date ?? '—'),
+                'business: ' + data.cabins_include_business,
+                'scan_run_id: ' + data.scan_run_id,
+                'run: ' + new Date().toLocaleString()
+              ]
+            : [
+                'create_context_status: ' + data.create_context_status,
+                'offers_status: ' + data.offers_status,
+                'inserted: ' + data.inserted_offer_count,
+                'in_db: ' + (data.offers_in_db_for_date ?? '—'),
+                'business: ' + data.cabins_include_business,
+                'scan_run_id: ' + data.scan_run_id,
+                'run: ' + new Date().toLocaleString()
+              ];
+          liveResultEl.innerHTML = parts.join(' · ');
+        }
+      } else {
+        showStatus(data.error || data.create_context_error || data.offers_error || 'Ingest failed', true);
+        if (isLive) {
+          liveResultEl.hidden = false;
+          liveResultEl.innerHTML = (data.error || data.create_context_error || data.offers_error || '') + ' · ' + (data.phase_hung || '');
+          liveResultEl.style.color = 'var(--color-text-danger)';
+        }
+      }
+    } catch (e) {
+      showStatus('Error: ' + e.message, true);
+    } finally {
+      btnIngest.disabled = false;
+    }
+  });
+
+  async function doLoadOffers() {
+    const p = getParams();
+    wrapEl.hidden = true;
+    emptyEl.hidden = true;
+    try {
+      const qs = new URLSearchParams({ origin: p.origin, destination: p.destination, depart_date: p.depart_date, limit: 50 });
+      const res = await fetch('/partner-awards/airfrance/offers?' + qs);
+      const data = await res.json();
+      const offers = data.offers || [];
+      if (offers.length === 0) {
+        emptyEl.hidden = false;
+        showStatus('');
+      } else {
+        bodyEl.innerHTML = offers.map(function(o) {
+          const segs = (o.segments || []).map(formatSegment).join(' · ');
+          const ec = formatCabin(o.cabins && o.cabins.ECONOMY);
+          const pr = formatCabin(o.cabins && o.cabins.PREMIUM);
+          const biz = formatCabin(o.cabins && o.cabins.BUSINESS);
+          return '<tr><td>' + segs + '</td><td>' + (o.stops || 0) + '</td><td>' + ec + '</td><td>' + pr + '</td><td>' + biz + '</td></tr>';
+        }).join('');
+        wrapEl.hidden = false;
+        showStatus('Loaded ' + offers.length + ' offers.');
+      }
+    } catch (e) {
+      showStatus('Error loading: ' + e.message, true);
+    }
+  }
+
+  document.getElementById('partner-import-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const form = e.target;
+    const fd = new FormData();
+    fd.append('file', form.file.files[0]);
+    fd.append('origin', form.origin.value || 'PAR');
+    fd.append('destination', form.destination.value || 'JNB');
+    fd.append('depart_date', form.depart_date.value || '2026-02-27');
+    fd.append('cabin_requested', form.cabin_requested.value || 'ECONOMY');
+    const btn = document.getElementById('btn-import');
+    const resultEl = document.getElementById('partner-import-result');
+    btn.disabled = true;
+    resultEl.hidden = true;
+    showStatus('Importing…');
+    try {
+      const res = await fetch('/partner-awards/airfrance/import', { method: 'POST', body: fd });
+      const data = await res.json();
+      resultEl.hidden = false;
+      if (data.ok) {
+        resultEl.style.color = 'var(--color-text-primary)';
+        resultEl.textContent = 'Imported ' + data.inserted_offer_count + ' offers (scan_run_id: ' + data.scan_run_id + ')' + (data.warnings ? ' · ' + data.warnings.join('; ') : '');
+        showStatus('Imported ' + data.inserted_offer_count + ' offers.');
+        doLoadOffers();
+      } else {
+        resultEl.style.color = 'var(--color-text-danger)';
+        resultEl.textContent = data.error || 'Import failed';
+        showStatus(data.error || 'Import failed', true);
+      }
+    } catch (err) {
+      resultEl.hidden = false;
+      resultEl.style.color = 'var(--color-text-danger)';
+      resultEl.textContent = 'Error: ' + err.message;
+      showStatus('Error: ' + err.message, true);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  btnLoad.addEventListener('click', async function() {
+    btnLoad.disabled = true;
+    showStatus('Loading offers…');
+    await doLoadOffers();
+    btnLoad.disabled = false;
+  });
+})();
+</script>
+{% endblock %}

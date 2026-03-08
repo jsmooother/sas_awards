@@ -1,0 +1,302 @@
+{% extends "base.html" %}
+{% block title %}Partner Awards – Virgin Atlantic – SAS Awards{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Virgin Atlantic</h1>
+  <p class="page-subtitle" style="margin:0;color:#86868b;font-size:1rem;">EuroBonus on Virgin Atlantic · Coming soon</p>
+</div>
+
+<div class="card">
+  <div class="card-inner">
+    <h3 class="card-section-title">Flights from London Heathrow</h3>
+    <p class="table-hint" style="margin:0 0 1rem;font-size:0.9rem;">Destinations served by Virgin Atlantic from LHR. Award availability scanning will be added in a future update.</p>
+    <div class="virgin-routes-grid">
+      {% for city, code in lhr_routes %}
+      <div class="virgin-route-item">
+        <span class="virgin-route-city">{{ city }}</span>
+        <span class="virgin-route-code">LHR → {{ code }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:1rem;" id="virgin-connect-card">
+  <div class="card-inner">
+    <div class="virgin-connect-header" id="virgin-connect-header" role="button" tabindex="0" aria-expanded="true" aria-controls="virgin-connect-body">
+      <h3 class="card-section-title" style="margin:0;display:flex;align-items:center;gap:0.5rem;">
+        <span class="virgin-connect-caret" aria-hidden="true">▾</span>
+        Connect Virgin Atlantic <span style="font-weight:400;color:#86868b;font-size:0.85rem;">(optional)</span>
+        <span id="virgin-connect-status" class="virgin-connect-status {% if has_cookies %}virgin-connect-active{% else %}virgin-connect-inactive{% endif %}">{% if has_cookies %}Active{% else %}Not configured{% endif %}</span>
+      </h3>
+    </div>
+    <div id="virgin-connect-body" class="virgin-connect-body">
+    <p class="table-hint" style="margin:0.75rem 0 0.5rem;">
+      Reward search needs a browser session cookie. To get it:
+      <br>1. Log in at <a href="https://www.virginatlantic.com" target="_blank" rel="noopener">virginatlantic.com</a> (Flying Club).
+      <br>2. Open DevTools (F12) → Network → Fetch/XHR. Run a reward flight search (e.g. London → New York).
+      <br>3. Click the <code>graphql</code> request (SearchOffers) → <strong>Headers</strong> tab.
+      <br>4. <strong>Best:</strong> Under <strong>Request Headers</strong>, find <code>Cookie</code> → right‑click its value → <strong>Copy value</strong>. Paste below. (One long line – often 2000+ characters; that’s normal.)
+      <br>5. <strong>Or:</strong> Under <strong>Response Headers</strong> you’ll see 4 <code>Set-Cookie</code> lines. Paste all 4 here; we’ll extract and use them.
+    </p>
+    <p class="table-hint" style="margin:0.25rem 0 0;font-size:0.8rem;color:#86868b;">If the Cookie value is truncated in DevTools, right‑click the <code>Cookie</code> row → Copy value to get the full string.</p>
+    <details class="table-hint" style="margin:0.5rem 0 0.75rem;font-size:0.8rem;">
+      <summary style="cursor:pointer;">Which of the 4 Set-Cookie headers does the API need?</summary>
+      <p style="margin:0.5rem 0 0;">Virgin’s response sends 4 <code>Set-Cookie</code> headers. We don’t know the minimal set; the API may need one or more of:</p>
+      <ul style="margin:0.25rem 0 0 1.2rem;padding:0;">
+        <li><code>com.virginholidays.att</code> – tracking</li>
+        <li><code>com.virginatlantic.edge.id</code> – edge/session id</li>
+        <li><code>bm_s</code> – Akamai Bot Manager (long value)</li>
+        <li><code>bm_sv</code> – Akamai Bot Manager (shorter)</li>
+      </ul>
+      <p style="margin:0.5rem 0 0;">So either copy the single <strong>Request</strong> <code>Cookie</code> header (recommended), or paste all 4 <strong>Response</strong> <code>Set-Cookie</code> lines; we use everything you paste.</p>
+    </details>
+    <form method="post" action="/partner-awards/virgin/cookies" id="virgin-cookies-form">
+      <textarea name="cookie_string" id="virgin-cookie-input" placeholder="Paste Cookie or Set-Cookie header(s) from DevTools – we'll extract the cookie." rows="8" style="width:100%;max-width:40rem;font-family:monospace;font-size:0.75rem;padding:0.5rem;border:1px solid rgba(0,0,0,0.12);border-radius:4px;resize:vertical;"></textarea>
+      <div style="margin-top:0.5rem;display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+        <button type="submit" class="btn-secondary">Save cookies</button>
+        <button type="button" class="btn-secondary" id="virgin-cookies-clear">Clear</button>
+        <button type="button" class="btn-secondary" id="virgin-cookies-test" title="Call Virgin API with saved cookie">Test connection</button>
+        <span id="virgin-cookies-configured" style="font-size:0.85rem;color:#34c759;{% if not has_cookies %}display:none;{% endif %}">✓ Cookies configured</span>
+        <span id="virgin-cookies-save-status" style="font-size:0.85rem;margin-left:0.25rem;"></span>
+      </div>
+    </form>
+    <p id="virgin-cookies-test-status" style="margin:0.5rem 0 0;font-size:0.85rem;display:none;"></p>
+    <p class="table-hint" style="margin:0.5rem 0 0;font-size:0.8rem;color:#86868b;">Test runs from this machine. <strong>444 on a residential IP</strong> often means Virgin’s WAF (Akamai) is blocking non‑browser clients (TLS fingerprint), not the cookie. Use the <strong>Request</strong> Cookie (one long line from Request Headers). If the script <code>python scripts/virgin_search_offers_no_auth.py</code> with the same cookie also returns 444, the site likely only accepts real browsers.</p>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:1rem;">
+  <div class="card-inner">
+    <h3 class="card-section-title">1. Select scope</h3>
+    <div class="toolbar filters" style="opacity:0.6;pointer-events:none;">
+      <label>
+        Month
+        <select name="month" disabled style="width:10rem;">
+          <option value="2026-02">2026-02</option>
+          <option value="2026-03">2026-03</option>
+        </select>
+      </label>
+      <label>
+        Cabin
+        <select name="cabin" disabled>
+          <option value="BUSINESS" selected>Business</option>
+          <option value="PREMIUM">Premium Economy</option>
+        </select>
+      </label>
+      <button type="button" disabled>Apply</button>
+    </div>
+    <p class="table-hint" style="margin-top:0.5rem;font-size:0.85rem;color:var(--color-text-muted);">Controls will be available when Virgin Atlantic scanning is implemented.</p>
+  </div>
+</div>
+
+<div class="card" style="margin-top:1rem;">
+  <div class="card-inner">
+    <h3 class="card-section-title">2. Watchlist</h3>
+    <p class="table-hint" style="margin:0 0 0.5rem;">Add routes to prepare for future scanning. Harmless to add now.</p>
+    <form method="post" action="/partner-awards/watchlist/add" class="toolbar filters" style="margin-bottom:1rem;">
+      <input type="hidden" name="program" value="virgin">
+      <label>
+        <select name="origin" required>
+          <option value="LHR">LHR</option>
+          <option value="MAN">MAN</option>
+          <option value="LGW">LGW</option>
+          <option value="EDI">EDI</option>
+          <option value="GLA">GLA</option>
+        </select>
+      </label>
+      <input type="text" name="destination" placeholder="Dest (e.g. JFK)" maxlength="4" style="width:5rem;">
+      <button type="submit" class="btn-secondary">Add route</button>
+    </form>
+    {% if watch_routes %}
+    <ul style="margin:0;padding:0;list-style:none;">
+      {% for r in watch_routes %}
+      <li style="margin:0.25rem 0;display:flex;align-items:center;gap:0.5rem;">
+        <form method="post" action="/partner-awards/watchlist/toggle" style="display:inline-flex;align-items:center;gap:0.5rem;">
+          <input type="hidden" name="id" value="{{ r.id }}">
+          <input type="hidden" name="enabled" value="{{ '0' if r.enabled else '1' }}">
+          <span>{{ r.origin }} → {{ r.destination }}</span>
+          <button type="submit" class="toggle-switch {% if r.enabled %}toggle-on{% endif %}" title="{{ 'On – tap to turn off' if r.enabled else 'Off – tap to turn on' }}" aria-label="{{ 'On' if r.enabled else 'Off' }}"></button>
+        </form>
+        <form method="post" action="/partner-awards/watchlist/remove" style="display:inline;">
+          <input type="hidden" name="id" value="{{ r.id }}">
+          <button type="submit" class="btn-remove" title="Remove route" onclick="return confirm('Are you sure you want to remove this route?');">×</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="table-hint" style="color:var(--color-text-muted);">No routes yet. Add origin and destination above.</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card" style="margin-top:1rem;">
+  <div class="card-inner">
+    <h3 class="card-section-title">3. Run scan</h3>
+    <button type="button" class="btn-primary" disabled style="opacity:0.6;cursor:not-allowed;">Run watchlist scan</button>
+    <p class="table-hint" style="margin-top:0.5rem;font-size:0.9rem;color:var(--color-text-muted);">
+      Scanning not yet implemented for Virgin Atlantic. Batch scan will be available in a future update.
+    </p>
+  </div>
+</div>
+
+<div class="card" style="margin-top:1rem;">
+  <div class="card-inner">
+    <h3 class="card-section-title">4. Review</h3>
+    <p class="table-hint" style="margin:0 0 0.75rem;">Reports structure is ready; data will appear when scanning is implemented.</p>
+    <a href="/partner-awards/virgin/reports" class="btn-primary" style="display:inline-block;text-decoration:none;padding:0.5rem 1rem;">View reports →</a>
+  </div>
+</div>
+
+<script>
+(function() {
+  var cookieForm = document.getElementById('virgin-cookies-form');
+  var cookieInput = document.getElementById('virgin-cookie-input');
+  var clearBtn = document.getElementById('virgin-cookies-clear');
+  var testBtn = document.getElementById('virgin-cookies-test');
+  var testStatus = document.getElementById('virgin-cookies-test-status');
+  var saveStatus = document.getElementById('virgin-cookies-save-status');
+  var configuredSpan = document.getElementById('virgin-cookies-configured');
+  var connectHeader = document.getElementById('virgin-connect-header');
+  var connectBody = document.getElementById('virgin-connect-body');
+  var connectCard = document.getElementById('virgin-connect-card');
+
+  function submitVirginCookies(cookieValue, done) {
+    var fd = new FormData();
+    fd.append('cookie_string', cookieValue || '');
+    fetch(cookieForm.action, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (saveStatus) {
+          saveStatus.textContent = '';
+          saveStatus.appendChild(document.createTextNode(d.ok ? d.message : (d.message || 'Error')));
+          if (d.preview) {
+            var code = document.createElement('code');
+            code.style.cssText = 'font-size:0.75rem;word-break:break-all;display:block;margin-top:0.25rem;';
+            code.textContent = d.preview;
+            saveStatus.appendChild(code);
+          }
+          saveStatus.style.color = d.ok ? '#34c759' : '#c00';
+          saveStatus.style.display = 'inline';
+          if (d.ok && configuredSpan) configuredSpan.style.display = d.has_cookies ? 'inline' : 'none';
+          var statusBadge = document.getElementById('virgin-connect-status');
+          if (d.ok && statusBadge) {
+            statusBadge.textContent = d.has_cookies ? 'Active' : 'Not configured';
+            statusBadge.className = 'virgin-connect-status ' + (d.has_cookies ? 'virgin-connect-active' : 'virgin-connect-inactive');
+          }
+          setTimeout(function() { saveStatus.textContent = ''; saveStatus.style.display = ''; }, 3000);
+        }
+        if (done) done(d);
+      })
+      .catch(function(e) {
+        if (saveStatus) { saveStatus.textContent = 'Failed: ' + (e.message || 'Request failed'); saveStatus.style.color = '#c00'; saveStatus.style.display = 'inline'; }
+        if (done) done({ ok: false });
+      });
+  }
+
+  if (cookieForm) {
+    cookieForm.onsubmit = function(e) {
+      e.preventDefault();
+      submitVirginCookies(cookieInput ? cookieInput.value : '');
+    };
+  }
+  if (clearBtn && cookieInput && cookieForm) {
+    clearBtn.onclick = function() {
+      cookieInput.value = '';
+      submitVirginCookies('');
+    };
+  }
+  if (testBtn && testStatus) {
+    testBtn.onclick = function() {
+      testBtn.disabled = true;
+      testStatus.textContent = 'Testing LON→NYC…';
+      testStatus.style.display = 'block';
+      testStatus.style.color = '';
+      fetch('/partner-awards/virgin/cookies/test', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          testStatus.textContent = d.ok ? '✓ ' + d.message : '✗ ' + (d.message || 'Failed');
+          testStatus.style.color = d.ok ? '#34c759' : '#c00';
+        })
+        .catch(function(e) {
+          testStatus.textContent = '✗ ' + (e.message || 'Request failed');
+          testStatus.style.color = '#c00';
+        })
+        .finally(function() { testBtn.disabled = false; });
+    };
+  }
+
+  var collapsed = localStorage.getItem('virgin-connect-collapsed') === '1';
+  if (connectBody) connectBody.style.display = collapsed ? 'none' : 'block';
+  if (connectCard) connectCard.classList.toggle('virgin-connect-collapsed', collapsed);
+  if (connectHeader) {
+    if (connectHeader.querySelector('.virgin-connect-caret')) connectHeader.querySelector('.virgin-connect-caret').textContent = collapsed ? '▸' : '▾';
+    connectHeader.setAttribute('aria-expanded', String(!collapsed));
+    connectHeader.addEventListener('click', function() {
+      collapsed = !collapsed;
+      if (connectBody) connectBody.style.display = collapsed ? 'none' : 'block';
+      if (connectCard) connectCard.classList.toggle('virgin-connect-collapsed', collapsed);
+      if (connectHeader.querySelector('.virgin-connect-caret')) connectHeader.querySelector('.virgin-connect-caret').textContent = collapsed ? '▸' : '▾';
+      connectHeader.setAttribute('aria-expanded', String(!collapsed));
+      localStorage.setItem('virgin-connect-collapsed', collapsed ? '1' : '0');
+    });
+    connectHeader.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); connectHeader.click(); }
+    });
+  }
+
+  document.addEventListener('submit', function(e) {
+    var form = e.target;
+    if (form.method === 'post' && form.action && form.action.indexOf('/partner-awards/watchlist/toggle') !== -1) {
+      e.preventDefault();
+      var btn = form.querySelector('button.toggle-switch');
+      var fd = new FormData(form);
+      fetch(form.action, { method: 'POST', body: fd, redirect: 'manual' })
+        .then(function(res) {
+          if (res.type === 'opaqueredirect' || res.status === 0 || res.status === 302) {
+            btn.classList.toggle('toggle-on');
+            var isOn = btn.classList.contains('toggle-on');
+            btn.title = isOn ? 'On – tap to turn off' : 'Off – tap to turn on';
+            btn.setAttribute('aria-label', isOn ? 'On' : 'Off');
+            var enabledInput = form.querySelector('input[name="enabled"]');
+            if (enabledInput) enabledInput.value = isOn ? '1' : '0';
+          }
+        })
+        .catch(function() { form.submit(); });
+    }
+  });
+})();
+</script>
+<style>
+.virgin-connect-header { cursor: pointer; padding: 0.25rem 0; user-select: none; }
+.virgin-connect-header:hover { opacity: 0.85; }
+.virgin-connect-caret { font-size: 0.75rem; color: #86868b; }
+.virgin-connect-status { font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.04em; }
+.virgin-connect-active { background: rgba(52, 199, 89, 0.15); color: #34c759; }
+.virgin-connect-inactive { background: rgba(0,0,0,0.06); color: #86868b; }
+.virgin-routes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.5rem 1.25rem;
+}
+.virgin-route-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.5rem 0.65rem;
+  background: rgba(0,0,0,0.03);
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+.virgin-route-city { font-weight: 600; color: #1d1d1f; }
+.virgin-route-code { font-size: 0.8rem; color: #86868b; letter-spacing: 0.02em; }
+.btn-remove {
+  width: 1.25rem; height: 1.25rem; padding: 0; font-size: 1rem; line-height: 1;
+  color: #c00; background: transparent; border: 1px solid rgba(0,0,0,0.12);
+  border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+}
+.btn-remove:hover { background: rgba(200,0,0,0.08); }
+</style>
+{% endblock %}

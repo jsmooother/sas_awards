@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Partner Awards System Test – SAS Awards{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Partner Awards System Test</h1>
+  <p class="page-subtitle" style="margin:0;color:var(--color-text-secondary);font-size:1rem;">DB-only checks · No network calls</p>
+</div>
+
+<div class="card">
+  <div class="card-inner">
+    <p class="table-hint" style="margin:0 0 1rem;"><a href="/partner-awards/flyingblue">← Flying Blue</a></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Check</th>
+          <th>Status</th>
+          <th>Message</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in checks %}
+        <tr>
+          <td>{{ c.name }}</td>
+          <td>
+            {% if c.status == 'PASS' %}
+            <span style="color:var(--color-text-success);font-weight:600;">PASS</span>
+            {% elif c.status == 'SKIP' %}
+            <span style="color:var(--color-text-muted);">SKIP</span>
+            {% else %}
+            <span style="color:var(--color-text-danger);font-weight:600;">FAIL</span>
+            {% endif %}
+          </td>
+          <td>{{ c.msg }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="table-hint" style="margin-top:1rem;">Copy diagnostics:</p>
+    <pre id="diag-pre" style="font-size:0.75rem;background:var(--color-bg-secondary,#f5f5f5);padding:0.75rem;border-radius:4px;overflow-x:auto;">{{ diag_json }}</pre>
+    <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('diag-pre').textContent)" class="btn-secondary" style="margin-top:0.5rem;">Copy to clipboard</button>
+  </div>
+</div>
+{% endblock %}
