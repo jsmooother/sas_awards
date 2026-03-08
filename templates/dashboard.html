@@ -1,0 +1,379 @@
+{% extends "base.html" %}
+{% block title %}Dashboard – SAS Awards{% endblock %}
+{% block content %}
+<style>
+  /* ── Filter bar (horizontal, above results) ── */
+  .filter-bar{margin-bottom:1.25rem}
+  .filter-row{display:flex;gap:.6rem;flex-wrap:wrap;align-items:flex-end}
+  .filter-row+.filter-row{margin-top:.6rem}
+  .filter-label{font-size:.68rem;font-weight:600;color:#86868b;text-transform:uppercase;letter-spacing:.04em;margin-bottom:.3rem}
+
+  .mode-toggle{display:inline-flex;background:rgba(0,0,0,.04);border-radius:10px;padding:3px}
+  .mode-btn{padding:.42rem .85rem;border-radius:8px;border:none;background:transparent;cursor:pointer;font-size:.82rem;font-weight:600;color:#515154;transition:all .15s}
+  .mode-btn.active{background:#fff;color:#007aff;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+
+  .pill-group{display:flex;gap:.3rem;flex-wrap:wrap}
+  .pill{padding:.38rem .75rem;border-radius:8px;border:1.5px solid rgba(0,0,0,.1);background:#fff;cursor:pointer;color:#515154;font-size:.8rem;font-weight:500;transition:all .15s;white-space:nowrap}
+  .pill:hover{border-color:rgba(0,122,255,.3);background:#f5f9ff}
+  .pill.active{border-color:#007aff;background:#e8f4ff;color:#007aff}
+
+  .f-input,.f-select{padding:.4rem .6rem;font-size:.84rem;border-radius:8px;border:1px solid rgba(0,0,0,.12);background:#fff}
+  .f-input:focus,.f-select:focus{outline:none;border-color:#007aff;box-shadow:0 0 0 2px rgba(0,122,255,.15)}
+  .f-input{width:150px}
+  .f-select{min-width:80px}
+  .f-input-sm{width:70px}
+  .f-date{width:135px}
+  .f-field{display:flex;flex-direction:column;gap:.2rem}
+  .f-field-label{font-size:.65rem;font-weight:500;color:#86868b}
+  .go-btn{padding:.42rem 1.2rem;border-radius:10px;border:none;background:#007aff;color:#fff;font-size:.85rem;font-weight:600;cursor:pointer;transition:background .15s;white-space:nowrap;align-self:flex-end}
+  .go-btn:hover{background:#0051d5}
+
+  /* ── Result rows ── */
+  .rr{display:grid;grid-template-columns:auto 1fr auto auto;gap:.6rem .85rem;align-items:center;padding:.75rem .85rem;border-bottom:1px solid rgba(0,0,0,.05);transition:background .1s;cursor:pointer}
+  .rr:last-child{border-bottom:none}.rr:hover{background:rgba(0,122,255,.04)}
+  .rr-origin{font-size:.68rem;font-weight:600;color:#86868b;letter-spacing:.03em}
+  .rr-city{font-size:.92rem;font-weight:600;color:#1d1d1f}
+  .rr-sub{font-size:.72rem;color:#86868b}
+  .rr-date{font-size:.82rem;font-weight:500;color:#515154;text-align:right;white-space:nowrap}
+  .sb{padding:.18rem .45rem;border-radius:6px;font-size:.68rem;font-weight:600;white-space:nowrap;line-height:1.3}
+  .sb-j{background:#fef3c7;color:#92400e}.sb-p{background:#dbeafe;color:#1e40af}.sb-y{background:#d1fae5;color:#065f46}
+  .seats-wrap{display:flex;gap:.3rem;flex-wrap:nowrap}
+
+  /* ── Weekend pair rows ── */
+  .wpr{padding:.75rem .85rem;border-bottom:1px solid rgba(0,0,0,.05);cursor:pointer;transition:background .1s}
+  .wpr:last-child{border-bottom:none}.wpr:hover{background:rgba(0,122,255,.04)}
+  .wpr-top{display:flex;align-items:baseline;gap:.6rem;margin-bottom:.3rem}
+  .wpr-city{font-size:.92rem;font-weight:600;color:#1d1d1f}
+  .wpr-code{font-size:.78rem;color:#86868b;font-weight:400}
+  .wpr-origin{font-size:.68rem;font-weight:600;color:#86868b;letter-spacing:.03em}
+  .wpr-country{font-size:.72rem;color:#86868b;margin-left:auto}
+  .wpr-legs{display:flex;gap:1.25rem;align-items:center;flex-wrap:wrap}
+  .wpr-leg{display:flex;flex-direction:column;gap:.08rem}
+  .wpr-leg-label{font-size:.6rem;font-weight:600;text-transform:uppercase;color:#86868b;letter-spacing:.04em}
+  .wpr-leg-date{font-size:.82rem;font-weight:500;color:#1d1d1f}
+  .wpr-arrow{color:#86868b;font-size:.85rem}
+  .wpr-seats{margin-left:auto;display:flex;gap:.25rem;flex-wrap:wrap}
+  .wpr-seats-group{display:flex;flex-direction:column;gap:.15rem;align-items:flex-end}
+  .wpr-seats-label{font-size:.55rem;color:#86868b;text-transform:uppercase;letter-spacing:.03em}
+
+  .pag{display:flex;justify-content:center;gap:.5rem;margin-top:.85rem}
+  .pag a{padding:.35rem .75rem;border-radius:8px;border:1px solid rgba(0,0,0,.1);color:#007aff;font-size:.82rem;font-weight:500;text-decoration:none}
+  .pag a:hover{background:#e8f4ff}
+  .empty-state{text-align:center;padding:2.5rem 1.25rem;color:#86868b}
+  .empty-state .ei{font-size:2.2rem;margin-bottom:.6rem}
+  .empty-state .et{font-size:1rem;font-weight:600;color:#1d1d1f;margin-bottom:.25rem}
+
+  /* ── Modal ── */
+  .detail-legs{display:flex;gap:1rem;margin-bottom:1rem;flex-wrap:wrap}
+  .detail-leg{flex:1;min-width:150px;padding:1rem;background:rgba(0,0,0,.03);border-radius:10px}
+  .dl-t{font-size:.65rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#86868b;margin-bottom:.4rem}
+  .dl-d{font-size:1rem;font-weight:600;margin-bottom:.12rem}
+  .dl-w{font-size:.78rem;color:#86868b;margin-bottom:.45rem}
+  .dl-s{font-size:.82rem;color:#515154;line-height:1.6}.dl-s strong{color:#1d1d1f}
+  .book-btn{display:block;width:100%;padding:.8rem;text-align:center;background:#000080;color:#fff;border:none;border-radius:10px;font-size:.95rem;font-weight:600;cursor:pointer;text-decoration:none;transition:background .2s;margin-top:.5rem}
+  .book-btn:hover{background:#000066}
+  .copy-row{display:flex;align-items:center;justify-content:space-between;padding:.45rem .65rem;background:rgba(0,0,0,.03);border-radius:8px;font-size:.78rem;color:#515154;margin-bottom:.7rem}
+  .copy-btn{padding:.2rem .5rem;border-radius:6px;border:1px solid rgba(0,0,0,.12);background:#fff;font-size:.72rem;cursor:pointer;color:#007aff;font-weight:500}
+  .detail-per-flight-section{margin-top:1rem;padding-top:1rem;border-top:1px solid rgba(0,0,0,.08)}
+  .detail-per-flight-section h4{font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#86868b;margin:0 0 .5rem}
+  .detail-flight-row{display:flex;align-items:center;gap:.75rem;padding:.5rem .6rem;background:rgba(0,0,0,.03);border-radius:8px;margin-bottom:.35rem;font-size:.85rem}
+  .detail-flight-row:last-child{margin-bottom:0}
+  .detail-flight-times{font-weight:600;min-width:100px}
+  .detail-flight-avail{font-size:.78rem;color:#515154}
+
+  @media(max-width:768px){
+    .filter-row{flex-direction:column;align-items:stretch}
+    .f-input,.f-date{width:100%}
+    .pill-group{overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch}
+  }
+</style>
+
+<div class="page-header"><h1 class="page-title">Dashboard</h1></div>
+
+{# ══════ FILTER BAR (top, full width) ══════ #}
+<div class="card filter-bar"><div class="card-inner">
+  <form id="f" method="get" action="/">
+    <input type="hidden" name="mode" id="mi" value="{{ filters.mode }}">
+    <input type="hidden" name="region" id="ri" value="{{ filters.region }}">
+    <input type="hidden" name="cabin" id="ci" value="{{ filters.cabin }}">
+
+    {# Row 1: Mode + Region #}
+    <div class="filter-row">
+      <div>
+        <div class="filter-label">Mode</div>
+        <div class="mode-toggle">
+          <button type="button" class="mode-btn {% if filters.mode != 'weekend' %}active{% endif %}" onclick="sm('flights')">Flights</button>
+          <button type="button" class="mode-btn {% if filters.mode == 'weekend' %}active{% endif %}" onclick="sm('weekend')">Weekend</button>
+        </div>
+      </div>
+      <div>
+        <div class="filter-label">Region</div>
+        <div class="pill-group">
+          <div class="pill {% if not filters.region %}active{% endif %}" onclick="sr('')">All</div>
+          {% for r in regions %}
+          <div class="pill {% if filters.region == r.key %}active{% endif %}" data-r="{{ r.key }}" onclick="sr('{{ r.key }}')">{{ r.label }}</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    {# Row 2: Class + inputs + search #}
+    <div class="filter-row">
+      <div>
+        <div class="filter-label">Class</div>
+        <div class="pill-group" id="cabin-pills">
+          {% if filters.mode == 'weekend' %}
+            {% for k,l in [("all","All"),("business_plus","Biz & Plus"),("business","Business")] %}
+            <div class="pill {% if filters.cabin==k %}active{% endif %}" data-c="{{ k }}" onclick="sc('{{ k }}')">{{ l }}</div>
+            {% endfor %}
+          {% else %}
+            {% for k,l in [("all","All"),("business","Business"),("plus","Plus"),("economy","Economy")] %}
+            <div class="pill {% if filters.cabin==k %}active{% endif %}" data-c="{{ k }}" onclick="sc('{{ k }}')">{{ l }}</div>
+            {% endfor %}
+          {% endif %}
+        </div>
+      </div>
+      <div class="f-field f-field-city">
+        <span class="f-field-label">City / code</span>
+        <div style="display:flex;gap:.4rem;align-items:stretch">
+          <input class="f-input" type="text" name="city" value="{{ filters.city }}" placeholder="e.g. Barcelona" id="city-input">
+          <button type="submit" class="go-btn">Search</button>
+        </div>
+      </div>
+      <div class="f-field">
+        <span class="f-field-label">Origin</span>
+        <select class="f-select" name="origin">
+          <option value="">All</option>
+          <option value="ARN" {% if filters.origin=='ARN' %}selected{% endif %}>ARN</option>
+          <option value="CPH" {% if filters.origin=='CPH' %}selected{% endif %}>CPH</option>
+        </select>
+      </div>
+      <div class="f-field">
+        <span class="f-field-label">Min seats</span>
+        <input class="f-input f-input-sm" type="number" name="min_seats" min="1" value="{{ filters.min_seats }}">
+      </div>
+      {% if filters.mode != 'weekend' %}
+      <div class="f-field">
+        <span class="f-field-label">From</span>
+        <input class="f-input f-date" type="date" name="from" value="{{ filters['from'] }}">
+      </div>
+      <div class="f-field">
+        <span class="f-field-label">To</span>
+        <input class="f-input f-date" type="date" name="to" value="{{ filters['to'] }}">
+      </div>
+      {% endif %}
+    </div>
+  </form>
+</div></div>
+
+{# ══════ RESULTS ══════ #}
+{% if results and results.rows %}
+<div class="card"><div class="card-inner">
+
+  {% set cabin_label = {"all":"All","business":"Business","business_plus":"Biz & Plus","plus":"Plus","economy":"Economy"} %}
+  <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:.4rem;margin-bottom:.6rem">
+    <span style="font-size:1.05rem;font-weight:600;color:#1d1d1f">
+      {% if filters.mode == 'weekend' %}Weekend Pairs{% else %}Flights{% endif %}
+      {% if filters.region %} · {{ regions|selectattr('key','equalto',filters.region)|map(attribute='label')|first }}{% endif %}
+      {% if filters.city %} · "{{ filters.city }}"{% endif %}
+      · {{ cabin_label.get(filters.cabin, filters.cabin) }}
+    </span>
+    <span style="font-size:.78rem;color:#86868b">{{ results.total }} {% if filters.mode=='weekend' %}pairs{% else %}flights{% endif %} · Page {{ results.page }}/{{ ((results.total-1)//results.per_page)+1 }}</span>
+  </div>
+
+  {# Weekend pair rows #}
+  {% if filters.mode == 'weekend' %}
+    {% for row in results.rows %}
+    <div class="wpr" onclick="owp('{{ row.origin }}','{{ row.airport_code }}','{{ row.outbound }}','{{ row.inbound }}')">
+      <div class="wpr-top">
+        <span class="wpr-origin">{{ row.origin }}</span>
+        <span class="wpr-city">{{ row.city_name }}</span>
+        <span class="wpr-code">{{ row.airport_code }}</span>
+        <span class="wpr-country">{{ row.country_name }}</span>
+      </div>
+      <div class="wpr-legs">
+        <div class="wpr-leg"><span class="wpr-leg-label">Out</span><span class="wpr-leg-date">{{ row.outbound }}</span></div>
+        <span class="wpr-arrow">→</span>
+        <div class="wpr-leg"><span class="wpr-leg-label">Return</span><span class="wpr-leg-date">{{ row.inbound }}</span></div>
+        <div class="wpr-seats">
+          <div class="wpr-seats-group"><span class="wpr-seats-label">Out</span><div class="seats-wrap">
+            {% if row.ab_out > 0 %}<span class="sb sb-j">J{{ row.ab_out }}</span>{% endif %}
+            {% if row.ap_out > 0 %}<span class="sb sb-p">+{{ row.ap_out }}</span>{% endif %}
+            {% if row.ag_out > 0 %}<span class="sb sb-y">Y{{ row.ag_out }}</span>{% endif %}
+          </div></div>
+          <div class="wpr-seats-group"><span class="wpr-seats-label">Return</span><div class="seats-wrap">
+            {% if row.ab_in > 0 %}<span class="sb sb-j">J{{ row.ab_in }}</span>{% endif %}
+            {% if row.ap_in > 0 %}<span class="sb sb-p">+{{ row.ap_in }}</span>{% endif %}
+            {% if row.ag_in > 0 %}<span class="sb sb-y">Y{{ row.ag_in }}</span>{% endif %}
+          </div></div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+
+  {# Regular flight rows #}
+  {% else %}
+    {% for row in results.rows %}
+    <div class="rr" onclick="od('{{ row.origin }}','{{ row.airport_code }}','{{ row.date }}','{{ row.direction }}')">
+      <div class="rr-origin">{{ row.origin }}</div>
+      <div><div class="rr-city">{{ row.city_name }} <span style="color:#86868b;font-weight:400;font-size:.78rem">{{ row.airport_code }}</span></div><div class="rr-sub">{{ row.country_name }} · {{ row.direction }}</div></div>
+      <div class="rr-date">{{ row.date }}</div>
+      <div class="seats-wrap">
+        {% if row.ab > 0 %}<span class="sb sb-j">J{{ row.ab }}</span>{% endif %}
+        {% if row.ap > 0 %}<span class="sb sb-p">+{{ row.ap }}</span>{% endif %}
+        {% if row.ag > 0 %}<span class="sb sb-y">Y{{ row.ag }}</span>{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  {% endif %}
+
+  {% set tp = ((results.total-1)//results.per_page)+1 %}
+  {% if tp > 1 %}
+  <div class="pag">
+    {% if results.page > 1 %}<a href="/?mode={{ filters.mode }}&region={{ filters.region }}&cabin={{ filters.cabin }}&origin={{ filters.origin }}&city={{ filters.city }}&min_seats={{ filters.min_seats }}&from={{ filters['from'] }}&to={{ filters['to'] }}&page={{ results.page-1 }}">← Prev</a>{% endif %}
+    <span style="padding:.35rem 0;font-size:.82rem;color:#86868b">{{ results.page }}/{{ tp }}</span>
+    {% if results.page < tp %}<a href="/?mode={{ filters.mode }}&region={{ filters.region }}&cabin={{ filters.cabin }}&origin={{ filters.origin }}&city={{ filters.city }}&min_seats={{ filters.min_seats }}&from={{ filters['from'] }}&to={{ filters['to'] }}&page={{ results.page+1 }}">Next →</a>{% endif %}
+  </div>
+  {% endif %}
+</div></div>
+
+{% else %}
+<div class="card"><div class="card-inner">
+  <div class="empty-state">
+    <div class="ei">{% if filters.mode == 'weekend' %}🗓{% else %}✈️{% endif %}</div>
+    <div class="et">{% if filters.region or filters.city %}No {% if filters.mode=='weekend' %}weekend pairs{% else %}flights{% endif %} found{% else %}Find EuroBonus awards{% endif %}</div>
+    <p style="color:#86868b;font-size:.88rem">{% if filters.region or filters.city %}Try widening your filters.{% else %}Choose a region or city, then search. Toggle to <strong>Weekend</strong> to find round-trip pairs.{% endif %}</p>
+  </div>
+</div></div>
+{% endif %}
+
+{# ── Detail modal ── #}
+<div id="dm" class="modal-overlay" role="dialog" aria-modal="true" hidden>
+  <div class="modal-backdrop"></div>
+  <div class="modal-content" style="max-width:460px">
+    <div class="modal-header"><h2 class="modal-title" id="dt">Details</h2><button type="button" class="modal-close" aria-label="Close">&times;</button></div>
+    <div class="modal-body" id="db"><div style="text-align:center;padding:2rem;color:#86868b">Loading…</div></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var DN=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  var form=document.getElementById('f');
+  function submitForm(){ if(form) form.submit(); }
+  window.sm=function(mode){
+    document.getElementById('mi').value=mode;
+    document.querySelectorAll('.mode-btn').forEach(function(b,i){b.classList.toggle('active',i===(mode==='flights'?0:1))});
+    var ci=document.getElementById('ci');
+    if(mode==='weekend'&&(ci.value==='plus'||ci.value==='economy'))ci.value='all';
+    if(mode==='flights'&&ci.value==='business_plus')ci.value='all';
+    submitForm();
+  };
+  window.sr=function(k){document.getElementById('ri').value=k;document.querySelectorAll('.pill[data-r],.pill:not([data-r]):not([data-c])').forEach(function(b){
+    if(b.dataset.r!==undefined)b.classList.toggle('active',b.dataset.r===k);
+    else if(!b.dataset.c)b.classList.toggle('active',k==='');
+  }); submitForm(); };
+  window.sc=function(k){document.getElementById('ci').value=k;document.querySelectorAll('.pill[data-c]').forEach(function(p){p.classList.toggle('active',p.dataset.c===k)}); submitForm(); };
+  form.querySelectorAll('select[name="origin"], input[name="min_seats"], input[name="from"], input[name="to"]').forEach(function(el){
+    el.addEventListener('change', submitForm);
+  });
+  var cityInput = form.querySelector('input[name="city"]');
+  cityInput.addEventListener('blur', submitForm);
+  cityInput.addEventListener('keydown', function(e){
+    if(e.key === 'Enter'){ e.preventDefault(); submitForm(); }
+  });
+  form.addEventListener('submit', function(){
+    var btn = form.querySelector('.go-btn');
+    if(btn){ btn.disabled = true; btn.textContent = '…'; }
+  });
+
+  var m=document.getElementById('dm'),mb=document.getElementById('db'),mt=document.getElementById('dt');
+  function cm(){m.setAttribute('hidden','')}
+  m.querySelector('.modal-close').addEventListener('click',cm);
+  m.querySelector('.modal-backdrop').addEventListener('click',cm);
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')cm()});
+
+  function renderLegs(legs,bookUrl){
+    var h='<div class="detail-legs">';
+    ['outbound','inbound'].forEach(function(dir){var l=legs[dir];if(!l)return;
+      h+='<div class="detail-leg"><div class="dl-t">'+dir+'</div><div class="dl-d">'+l.date+'</div><div class="dl-w">'+DN[new Date(l.date+'T00:00:00').getDay()]+'</div><div class="dl-s">'
+      +(l.ab>0?'<div>Business: <strong>'+l.ab+'</strong></div>':'')
+      +(l.ap>0?'<div>Plus: <strong>'+l.ap+'</strong></div>':'')
+      +(l.ag>0?'<div>Economy: <strong>'+l.ag+'</strong></div>':'')
+      +'</div></div>'});
+    h+='</div><a class="book-btn" href="'+bookUrl+'" target="_blank" rel="noopener">Book on SAS ↗</a>';
+    return h;
+  }
+
+  window.od=function(o,d,dt,dir){
+    m.removeAttribute('hidden');mb.innerHTML='<div style="text-align:center;padding:2rem;color:#86868b">Loading…</div>';
+    fetch('/api/detail?origin='+encodeURIComponent(o)+'&dest='+encodeURIComponent(d)+'&date='+encodeURIComponent(dt))
+    .then(function(r){return r.json()}).then(function(data){
+      if(data.error){mb.innerHTML='<p style="color:#c00">'+data.error+'</p>';return}
+      var fl=data.legs.outbound||data.legs.inbound||{},city=fl.city_name||d;
+      mt.textContent=o+' → '+city+' ('+d+')';
+      var direction = (dir || 'outbound').toLowerCase();
+      var ct = direction === 'inbound' ? (d+' → '+o+' · '+dt) : (o+' → '+d+' · '+dt);
+      mb.innerHTML='<div class="copy-row"><span>'+ct+'</span><button class="copy-btn" onclick="navigator.clipboard.writeText(\''+ct.replace(/'/g,"\\'")+'\');this.textContent=\'Copied!\'">Copy</button></div>'+renderLegs(data.legs,data.booking_url);
+      appendDayRoutesToModal(mb,o,d,dt,dir||'outbound');
+    }).catch(function(){mb.innerHTML='<p style="color:#c00">Failed to load.</p>'});
+  };
+
+  function filterFlightsToDest(flights, dest){
+    if(!Array.isArray(flights)) return [];
+    return flights.filter(function(f){ var id=f.flightId||''; return id.split('-').pop()===dest; });
+  }
+  function renderRoutesFlights(list, label){
+    if(!list.length) return '';
+    var h='<div class="detail-per-flight-section"><h4>'+label+'</h4>';
+    list.forEach(function(f){
+      var dep=f.departureTime||'—', arr=f.arrivalTime||'—';
+      var av=f.availability||{}; var parts=[];
+      if(av.AB) parts.push('Biz '+av.AB); if(av.AP) parts.push('Plus '+av.AP); if(av.AG) parts.push('Eco '+av.AG);
+      h+='<div class="detail-flight-row"><span class="detail-flight-times">'+dep+' → '+arr+'</span><span class="detail-flight-avail">'+parts.join(' · ')+'</span></div>';
+    });
+    return h+'</div>';
+  }
+  function appendDayRoutesToModal(mb, origin, dest, dateStr, direction){
+    var msg = '<p class="detail-per-flight-section" style="color:#86868b;font-size:.85rem">Flight times for this date are not available from SAS.</p>';
+    var apiOrigin = (direction === 'inbound') ? dest : origin;
+    var apiDest = (direction === 'inbound') ? origin : dest;
+    var filterBy = apiDest;
+    fetch('/api/routes?origin='+encodeURIComponent(apiOrigin)+'&dest='+encodeURIComponent(apiDest)+'&date='+encodeURIComponent(dateStr))
+    .then(function(r){return r.json()}).then(function(data){
+      if(data && data._error){ mb.insertAdjacentHTML('beforeend',msg); return; }
+      var list = Array.isArray(data) ? filterFlightsToDest(data, filterBy) : (data && data.flights ? filterFlightsToDest(data.flights, filterBy) : []);
+      if(list.length) mb.insertAdjacentHTML('beforeend', renderRoutesFlights(list, 'Flights (times & seats)'));
+      else mb.insertAdjacentHTML('beforeend', msg);
+    }).catch(function(){ mb.insertAdjacentHTML('beforeend', msg); });
+  }
+  function appendWeekendRoutesToModal(mb, origin, code, outbound, inbound){
+    var msg = '<p class="detail-per-flight-section" style="color:#86868b;font-size:.85rem">Flight times for this date are not available from SAS.</p>';
+    fetch('/api/weekend-routes?origin='+encodeURIComponent(origin)+'&airport_code='+encodeURIComponent(code)+'&outbound='+encodeURIComponent(outbound)+'&inbound='+encodeURIComponent(inbound))
+    .then(function(r){return r.json()}).then(function(data){
+      if(data._error){ mb.insertAdjacentHTML('beforeend',msg); return; }
+      var outList=data.outbound&&Array.isArray(data.outbound.flights)?filterFlightsToDest(data.outbound.flights,code):[];
+      var inList=data.inbound&&Array.isArray(data.inbound.flights)?filterFlightsToDest(data.inbound.flights,origin):[];
+      if(outList.length) mb.insertAdjacentHTML('beforeend',renderRoutesFlights(outList,'Outbound flights'));
+      if(inList.length) mb.insertAdjacentHTML('beforeend',renderRoutesFlights(inList,'Return flights'));
+      if(!outList.length&&!inList.length) mb.insertAdjacentHTML('beforeend',msg);
+    }).catch(function(){ mb.insertAdjacentHTML('beforeend',msg); });
+  }
+  window.owp=function(o,d,outDt,inDt){
+    m.removeAttribute('hidden');mb.innerHTML='<div style="text-align:center;padding:2rem;color:#86868b">Loading…</div>';
+    fetch('/api/weekend-pair-detail?origin='+encodeURIComponent(o)+'&dest='+encodeURIComponent(d)+'&outbound='+encodeURIComponent(outDt)+'&inbound='+encodeURIComponent(inDt))
+    .then(function(r){return r.json()}).then(function(data){
+      if(data.error){mb.innerHTML='<p style="color:#c00">'+data.error+'</p>';return}
+      var fl=data.outbound||data.inbound||{},city=fl.city_name||d;
+      mt.textContent=o+' → '+city+' ('+d+') – Weekend';
+      var days=Math.round((new Date(inDt+'T00:00:00')-new Date(outDt+'T00:00:00'))/86400000);
+      var ct=o+' → '+d+' · '+outDt+' → '+inDt+' ('+days+'d)';
+      mb.innerHTML='<div class="copy-row"><span>'+ct+'</span><button class="copy-btn" onclick="navigator.clipboard.writeText(\''+ct+'\');this.textContent=\'Copied!\'">Copy</button></div>'
+        +'<p style="font-size:.85rem;color:#86868b;margin:0 0 .75rem">'+days+'-day trip · '+o+' → '+city+' → '+o+'</p>'
+        +renderLegs({outbound:data.outbound,inbound:data.inbound},data.booking_url);
+      appendWeekendRoutesToModal(mb,o,d,outDt,inDt);
+    }).catch(function(){mb.innerHTML='<p style="color:#c00">Failed to load.</p>'});
+  };
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,564 @@
+{% extends "base.html" %}
+{% block title %}Reports – SAS Awards{% endblock %}
+{% block content %}
+<style>
+  .report-tabs{display:flex;gap:0;margin-bottom:1.5rem;background:rgba(0,0,0,.04);border-radius:10px;padding:4px;width:fit-content;flex-wrap:wrap}
+  .report-tabs a{padding:.5rem 1rem;font-size:.85rem;font-weight:500;color:#515154;text-decoration:none;border-radius:8px;transition:all .2s;white-space:nowrap}
+  .report-tabs a:hover{color:#1d1d1f}
+  .report-tabs a.active{background:#fff;color:#007aff;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  .report-filters{display:flex;gap:.75rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:1.25rem}
+  .report-filters label{display:flex;flex-direction:column;gap:.25rem;font-size:.72rem;font-weight:500;color:#86868b}
+  .report-filters select,.report-filters input{padding:.4rem .6rem;font-size:.88rem;border-radius:8px;border:1px solid rgba(0,0,0,.12);background:#fff;min-width:90px}
+  .report-filters select.report-filter-country{min-width:160px}
+  .report-filters select:focus,.report-filters input:focus{outline:none;border-color:#007aff;box-shadow:0 0 0 2px rgba(0,122,255,.15)}
+  .report-filters button{padding:.45rem 1rem;font-size:.88rem;font-weight:500;background:#007aff;color:#fff;border:none;border-radius:8px;cursor:pointer}
+  .report-filters button:hover{background:#0051d5}
+  .report-pill-group{display:flex;gap:.3rem;flex-wrap:wrap;align-items:center}
+  .report-pill{padding:.38rem .75rem;border-radius:8px;border:1.5px solid rgba(0,0,0,.1);background:#fff;cursor:pointer;color:#515154;font-size:.8rem;font-weight:500;transition:all .15s;white-space:nowrap}
+  .report-pill:hover{border-color:rgba(0,122,255,.3);background:#f5f9ff}
+  .report-pill.active{border-color:#007aff;background:#e8f4ff;color:#007aff}
+  .chart-wrap{position:relative;height:340px;margin-bottom:1rem}
+  .rtable{width:100%;border-collapse:collapse;font-size:.88rem}
+  .rtable th,.rtable td{padding:.7rem 1rem;text-align:left;border-bottom:1px solid rgba(0,0,0,.06)}
+  .rtable th{background:rgba(0,0,0,.02);font-weight:600;color:#515154;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em}
+  .rtable tbody tr:hover{background:rgba(0,0,0,.02)}
+  .rtable tbody tr:last-child td{border-bottom:none}
+  .report-msg{padding:1rem;background:#fff9e6;border-radius:10px;margin-bottom:1.25rem;color:#8b6914;font-size:.9rem;border:1px solid rgba(255,193,7,.3)}
+  .report-summary{display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem}
+  .report-summary .stat-item{min-width:100px}
+  .year-cal-grid-3x4{grid-template-columns:repeat(3, 1fr);gap:1.25rem}
+  .year-cal-grid-3x4 .month-card{min-width:0}
+  .year-cal-grid-3x4 .calendar-day{min-height:38px;padding:0.2rem 0.1rem}
+  .year-cal-grid-3x4 .calendar-day-num{font-size:0.8rem}
+  .year-cal-grid-3x4 .month-days{gap:0.3rem}
+  .month-days-header{display:grid;grid-template-columns:repeat(7, minmax(0, 1fr));gap:0.2rem;margin-bottom:0.35rem}
+  .calendar-dow{font-size:0.6rem;font-weight:600;text-transform:uppercase;letter-spacing:.03em;color:#86868b;text-align:center}
+  .detail-per-flight-section{margin-top:1rem;padding-top:1rem;border-top:1px solid rgba(0,0,0,.08)}
+  .detail-per-flight-section h4{font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#86868b;margin:0 0 .5rem}
+  .detail-flight-row{display:flex;align-items:center;gap:.75rem;padding:.5rem .6rem;background:rgba(0,0,0,.03);border-radius:8px;margin-bottom:.35rem;font-size:.85rem}
+  .detail-flight-row:last-child{margin-bottom:0}
+  .detail-flight-times{font-weight:600;min-width:100px}
+  .detail-flight-avail{font-size:.78rem;color:#515154}
+  .detail-flight-avail span{margin-right:.5rem}
+  .calendar-list-collapse{ margin-top:1.25rem; border:1px solid rgba(0,0,0,.08); border-radius:10px; overflow:hidden }
+  .calendar-list-collapse .collapse-head{ display:flex; align-items:center; justify-content:space-between; padding:.6rem 1rem; background:rgba(0,0,0,.03); cursor:pointer; font-size:.85rem; font-weight:400; color:#515154; user-select:none; border:none; width:100%; text-align:left }
+  .calendar-list-collapse .collapse-head:hover{ background:rgba(0,0,0,.06); color:#1d1d1f }
+  .calendar-list-collapse .collapse-head .collapse-chevron{ font-size:.7rem; color:#86868b; transition:transform .2s; flex-shrink:0; margin-left:.5rem }
+  .calendar-list-collapse.is-open .collapse-head .collapse-chevron{ transform:rotate(180deg) }
+  .calendar-list-collapse .collapse-body{ display:none; padding:1rem }
+  .calendar-list-collapse.is-open .collapse-body{ display:block }
+</style>
+
+<div class="page-header">
+  <h1 class="page-title">Reports</h1>
+</div>
+
+<div class="report-tabs">
+  <a href="/reports?tab=region" class="{% if tab=='region' %}active{% endif %}">Region</a>
+  <a href="/reports?tab=city" class="{% if tab=='city' %}active{% endif %}">City</a>
+  <a href="/reports?tab=business" class="{% if tab=='business' %}active{% endif %}">Business</a>
+  <a href="/reports?tab=weekend" class="{% if tab=='weekend' %}active{% endif %}">Weekend</a>
+  <a href="/reports?tab=new" class="{% if tab=='new' %}active{% endif %}">New Today</a>
+</div>
+
+{# ═══════════════════════════════════════════════════════════════════ #}
+{# TAB: REGION                                                       #}
+{# ═══════════════════════════════════════════════════════════════════ #}
+{% if tab == 'region' %}
+<div class="card"><div class="card-inner">
+  <form class="report-filters report-filters-auto" method="get" action="/reports">
+    <input type="hidden" name="tab" value="region">
+    <label>Cabin<select name="cabin"><option value="all" {% if filters.cabin=='all' %}selected{% endif %}>All</option><option value="business" {% if filters.cabin=='business' %}selected{% endif %}>Business</option><option value="plus" {% if filters.cabin=='plus' %}selected{% endif %}>Plus</option><option value="economy" {% if filters.cabin=='economy' %}selected{% endif %}>Economy</option></select></label>
+    <label>Origin<select name="origin"><option value="">All</option><option value="ARN" {% if filters.origin=='ARN' %}selected{% endif %}>ARN</option><option value="CPH" {% if filters.origin=='CPH' %}selected{% endif %}>CPH</option></select></label>
+    <label>Country<select name="country" class="report-filter-country"><option value="">All</option>{% for c in countries_list %}<option value="{{ c }}" {% if filters.country==c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></label>
+  </form>
+  {% if data and data.chart and data.chart.labels %}
+  <div class="calendar-list-collapse report-chart-collapse" id="report-chart-collapse">
+    <button type="button" class="collapse-head" aria-expanded="false">Chart <span class="collapse-chevron">▼</span></button>
+    <div class="collapse-body"><div class="chart-wrap"><canvas id="chart"></canvas></div></div>
+  </div>
+  {% endif %}
+</div></div>
+{% if data and data.table %}
+<div class="card"><div class="card-inner">
+  <h3 class="card-section-title">By Country <span class="count">({{ data.table|length }})</span></h3>
+  <div class="table-wrapper"><table class="rtable"><thead><tr><th>Region</th><th>Country</th><th>Dest</th><th>Flights</th><th>Biz</th><th>Plus</th><th>Eco</th></tr></thead><tbody>
+  {% for r in data.table %}<tr class="row-clickable report-region-row" data-country="{{ r.country }}" data-region="{{ r.region }}"><td>{{ r.region }}</td><td>{{ r.country }}</td><td>{{ r.dests }}</td><td>{{ r.flights }}</td><td>{{ r.biz }}</td><td>{{ r.plus }}</td><td>{{ r.eco }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</div></div>
+{% endif %}
+
+{# ═══════════════════════════════════════════════════════════════════ #}
+{# TAB: CITY                                                         #}
+{# ═══════════════════════════════════════════════════════════════════ #}
+{% elif tab == 'city' %}
+<div class="card"><div class="card-inner">
+  <form class="report-filters report-filters-auto" method="get" action="/reports">
+    <input type="hidden" name="tab" value="city">
+    <label>Cabin<select name="cabin"><option value="all" {% if filters.cabin=='all' %}selected{% endif %}>All</option><option value="business" {% if filters.cabin=='business' %}selected{% endif %}>Business</option><option value="plus" {% if filters.cabin=='plus' %}selected{% endif %}>Plus</option><option value="economy" {% if filters.cabin=='economy' %}selected{% endif %}>Economy</option></select></label>
+    <label>Origin<select name="origin"><option value="">All</option><option value="ARN" {% if filters.origin=='ARN' %}selected{% endif %}>ARN</option><option value="CPH" {% if filters.origin=='CPH' %}selected{% endif %}>CPH</option></select></label>
+    <label>Country<select name="country" class="report-filter-country"><option value="">All</option>{% for c in countries_list %}<option value="{{ c }}" {% if filters.country==c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></label>
+  </form>
+  {% if data and data.chart and data.chart.labels %}
+  <div class="calendar-list-collapse report-chart-collapse" id="report-chart-collapse">
+    <button type="button" class="collapse-head" aria-expanded="false">Chart <span class="collapse-chevron">▼</span></button>
+    <div class="collapse-body"><div class="chart-wrap"><canvas id="chart"></canvas></div></div>
+  </div>
+  {% endif %}
+</div></div>
+{% if data and data.table %}
+<div class="card"><div class="card-inner">
+  <h3 class="card-section-title">Top Destinations <span class="count">({{ data.table|length }})</span></h3>
+  <div class="table-wrapper"><table class="rtable"><thead><tr><th>City</th><th>Code</th><th>Country</th><th>Flights</th><th>Biz</th><th>Plus</th><th>Eco</th></tr></thead><tbody>
+  {% for r in data.table %}<tr class="row-clickable report-city-row" data-origin="{{ filters.origin or 'ARN' }}" data-city="{{ r.city }}" data-code="{{ r.code }}"><td>{{ r.city }}</td><td>{{ r.code }}</td><td>{{ r.country }}</td><td>{{ r.flights }}</td><td>{{ r.biz }}</td><td>{{ r.plus }}</td><td>{{ r.eco }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</div></div>
+{% endif %}
+
+{# ═══════════════════════════════════════════════════════════════════ #}
+{# TAB: BUSINESS                                                     #}
+{# ═══════════════════════════════════════════════════════════════════ #}
+{% elif tab == 'business' %}
+<div class="card"><div class="card-inner">
+  <form class="report-filters report-filters-auto" method="get" action="/reports">
+    <input type="hidden" name="tab" value="business">
+    <label>Origin<select name="origin"><option value="">All</option><option value="ARN" {% if filters.origin=='ARN' %}selected{% endif %}>ARN</option><option value="CPH" {% if filters.origin=='CPH' %}selected{% endif %}>CPH</option></select></label>
+    <label>Country<select name="country" class="report-filter-country"><option value="">All</option>{% for c in countries_list %}<option value="{{ c }}" {% if filters.country==c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></label>
+  </form>
+  {% if data and data.chart and data.chart.labels %}
+  <div class="calendar-list-collapse report-chart-collapse" id="report-chart-collapse">
+    <button type="button" class="collapse-head" aria-expanded="false">Chart <span class="collapse-chevron">▼</span></button>
+    <div class="collapse-body"><div class="chart-wrap"><canvas id="chart"></canvas></div></div>
+  </div>
+  {% endif %}
+</div></div>
+{% if data and data.table %}
+<div class="card"><div class="card-inner">
+  <h3 class="card-section-title">Business Flights <span class="count">({{ data.table|length }})</span></h3>
+  <div class="table-wrapper"><table class="rtable"><thead><tr><th>Origin</th><th>City</th><th>Code</th><th>Date</th><th>Business</th></tr></thead><tbody>
+  {% for r in data.table %}<tr><td>{{ r.origin }}</td><td>{{ r.city }}</td><td>{{ r.code }}</td><td>{{ r.date }}</td><td>{{ r.ab }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</div></div>
+{% endif %}
+
+{# ═══════════════════════════════════════════════════════════════════ #}
+{# TAB: WEEKEND                                                      #}
+{# ═══════════════════════════════════════════════════════════════════ #}
+{% elif tab == 'weekend' %}
+<div class="card"><div class="card-inner">
+  <form class="report-filters report-filters-auto" method="get" action="/reports">
+    <input type="hidden" name="tab" value="weekend">
+    <input type="hidden" name="cabin" id="report-weekend-cabin" value="{{ filters.cabin }}">
+    <label>Cabin
+      <div class="report-pill-group" aria-label="Cabin filter">
+        <div class="report-pill {% if filters.cabin == 'business' %}active{% endif %}" data-cabin="business">Business</div>
+        <div class="report-pill {% if filters.cabin == 'business_plus' %}active{% endif %}" data-cabin="business_plus">Biz &amp; Plus</div>
+        <div class="report-pill {% if filters.cabin == 'all' %}active{% endif %}" data-cabin="all">All</div>
+      </div>
+    </label>
+    <label>Origin<select name="origin"><option value="">All</option><option value="ARN" {% if filters.origin=='ARN' %}selected{% endif %}>ARN</option><option value="CPH" {% if filters.origin=='CPH' %}selected{% endif %}>CPH</option></select></label>
+    <label>Country<select name="country" class="report-filter-country"><option value="">All</option>{% for c in countries_list %}<option value="{{ c }}" {% if filters.country==c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></label>
+  </form>
+  {% if data and data.summary %}
+  <div class="report-summary">
+    {% for o, s in data.summary.items() %}
+    <div class="stat-item"><div class="stat-label">{{ o }}</div><div class="stat-value">{{ s.cities }}</div><div class="stat-sublabel">cities · {{ s.pairs }} pairs</div></div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if data and data.chart and data.chart.labels %}
+  <div class="calendar-list-collapse report-chart-collapse" id="report-chart-collapse">
+    <button type="button" class="collapse-head" aria-expanded="false">Chart <span class="collapse-chevron">▼</span></button>
+    <div class="collapse-body"><div class="chart-wrap"><canvas id="chart"></canvas></div></div>
+  </div>
+  {% endif %}
+</div></div>
+{% if data and data.table %}
+<div class="card"><div class="card-inner">
+  <h3 class="card-section-title">All Cities <span class="count">({{ data.table|length }})</span></h3>
+  <div class="table-wrapper"><table class="rtable"><thead><tr><th>Origin</th><th>City</th><th>Code</th><th>Pairs</th><th>Earliest</th><th>Latest</th></tr></thead><tbody>
+  {% for r in data.table %}<tr class="row-clickable report-weekend-city-row" data-origin="{{ r.origin }}" data-city="{{ r.city }}" data-code="{{ r.code }}"><td>{{ r.origin }}</td><td>{{ r.city }}</td><td>{{ r.code }}</td><td>{{ r.pairs }}</td><td>{{ r.earliest }}</td><td>{{ r.latest }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</div></div>
+{% endif %}
+
+{# ═══════════════════════════════════════════════════════════════════ #}
+{# TAB: NEW TODAY                                                     #}
+{# ═══════════════════════════════════════════════════════════════════ #}
+{% elif tab == 'new' %}
+{% if data is none %}
+<div class="report-msg">No flight history yet. Run <code>update_sas_awards.py</code> at least twice on different days.</div>
+{% elif data %}
+<div class="card"><div class="card-inner">
+  <p style="font-size:.88rem;color:#86868b;margin:0 0 1rem">New business flights: {{ data.prev }} → {{ data.latest }}</p>
+  {% if data.chart and data.chart.labels %}
+  <div class="calendar-list-collapse report-chart-collapse" id="report-chart-collapse">
+    <button type="button" class="collapse-head" aria-expanded="false">Chart <span class="collapse-chevron">▼</span></button>
+    <div class="collapse-body"><div class="chart-wrap"><canvas id="chart"></canvas></div></div>
+  </div>
+  {% endif %}
+</div></div>
+{% if data.table %}
+<div class="card"><div class="card-inner">
+  <h3 class="card-section-title">New Flights <span class="count">({{ data.table|length }})</span></h3>
+  <div class="table-wrapper"><table class="rtable"><thead><tr><th>Origin</th><th>City</th><th>Code</th><th>Date</th><th>Dir</th><th>Biz</th></tr></thead><tbody>
+  {% for r in data.table %}<tr><td>{{ r.origin }}</td><td>{{ r.city }}</td><td>{{ r.code }}</td><td>{{ r.date }}</td><td>{{ r.direction }}</td><td>{{ r.ab }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</div></div>
+{% endif %}
+{% endif %}
+{% endif %}
+
+{# ═══════════════════════════════════════════════════════════════════ #}
+{# Modals: cities drill-down (region), 365-day calendar                #}
+{# ═══════════════════════════════════════════════════════════════════ #}
+<div class="modal-overlay" id="report-cities-modal" hidden>
+  <div class="modal-backdrop" data-close="report-cities-modal"></div>
+  <div class="modal-content report-modal-content" style="max-width:520px">
+    <div class="modal-header">
+      <h2 class="modal-title" id="report-cities-title">Cities</h2>
+      <button type="button" class="modal-close" data-close="report-cities-modal" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body" id="report-cities-body"></div>
+  </div>
+</div>
+<div class="modal-overlay" id="report-calendar-modal" hidden>
+  <div class="modal-backdrop" data-close="report-calendar-modal"></div>
+  <div class="modal-content weekend-calendar-modal-content" style="max-width:980px">
+    <div class="modal-header">
+      <h2 class="modal-title" id="report-calendar-title">Weekend calendar</h2>
+      <button type="button" class="modal-close" data-close="report-calendar-modal" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body" id="report-calendar-body"></div>
+  </div>
+</div>
+<div class="modal-overlay" id="report-detail-modal" hidden>
+  <div class="modal-backdrop" data-close="report-detail-modal"></div>
+  <div class="modal-content" style="max-width:460px">
+    <div class="modal-header">
+      <h2 class="modal-title" id="report-detail-title">Flight details</h2>
+      <button type="button" class="modal-close" data-close="report-detail-modal" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body" id="report-detail-body">Loading…</div>
+  </div>
+</div>
+
+{# ═══════════════════════════════════════════════════════════════════ #}
+{# Chart.js rendering                                                 #}
+{# ═══════════════════════════════════════════════════════════════════ #}
+{% if data and data is mapping and data.chart is defined and data.chart and data.chart.labels %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+(function(){
+  var C=['rgba(0,122,255,.7)','rgba(255,149,0,.7)','rgba(52,199,89,.7)','rgba(255,59,48,.7)','rgba(175,82,222,.7)','rgba(90,200,250,.7)'];
+  var B=['rgba(0,122,255,1)','rgba(255,149,0,1)','rgba(52,199,89,1)','rgba(255,59,48,1)','rgba(175,82,222,1)','rgba(90,200,250,1)'];
+  var d={{ data.chart|tojson }};
+  var el=document.getElementById('chart');if(!el||!d||!d.labels||!d.labels.length)return;
+  var isHoriz='{{ tab }}'==='weekend'||'{{ tab }}'==='city';
+  var isLine='{{ tab }}'==='business';
+  var ds=d.datasets.map(function(s,i){return{label:s.label,data:s.data,
+    backgroundColor:C[i%C.length],borderColor:B[i%B.length],
+    borderWidth:isLine?2:1,fill:isLine?'origin':undefined,tension:.3,pointRadius:isLine?1:undefined}});
+  var chartInstance=new Chart(el,{type:isLine?'line':'bar',data:{labels:d.labels,datasets:ds},options:{
+    indexAxis:isHoriz?'y':'x',responsive:true,maintainAspectRatio:false,
+    interaction:{mode:'index',intersect:false},
+    plugins:{legend:{display:ds.length>1}},
+    scales:{x:{beginAtZero:true,ticks:{maxRotation:45,autoSkip:true,maxTicksLimit:40,font:{size:11}}},
+            y:{beginAtZero:true,ticks:{font:{size:11}}}}}});
+  var collapseEl=document.getElementById('report-chart-collapse');
+  if(collapseEl){
+    collapseEl.querySelector('.collapse-head').addEventListener('click',function(){
+      collapseEl.classList.toggle('is-open');
+      this.setAttribute('aria-expanded',collapseEl.classList.contains('is-open'));
+      if(chartInstance&&collapseEl.classList.contains('is-open')) chartInstance.resize();
+    });
+  }
+})();
+</script>
+{% endif %}
+
+<script>
+(function(){
+  var minSeats = 2;
+  function getReportFilters(){
+    var f = document.querySelector('.report-filters-auto');
+    if(!f) return { cabin: 'all', origin: '' };
+    var cabinEl = f.querySelector('[name=cabin]');
+    var originEl = f.querySelector('[name=origin]');
+    return {
+      cabin: cabinEl ? cabinEl.value : 'all',
+      origin: originEl ? originEl.value : ''
+    };
+  }
+  document.querySelectorAll('.report-filters-auto select').forEach(function(sel){
+    sel.addEventListener('change', function(){ this.form.submit(); });
+  });
+  document.querySelectorAll('.report-pill-group .report-pill').forEach(function(pill){
+    pill.addEventListener('click', function(){
+      var form = this.closest('form');
+      var input = form && form.querySelector('#report-weekend-cabin');
+      if(input){ input.value = this.getAttribute('data-cabin'); form.submit(); }
+    });
+  });
+
+  document.querySelectorAll('[data-close]').forEach(function(el){
+    el.addEventListener('click', function(){
+      var id = this.getAttribute('data-close');
+      if(id) document.getElementById(id).setAttribute('hidden','');
+    });
+  });
+  document.addEventListener('keydown', function(e){
+    if(e.key !== 'Escape') return;
+    var reportModals = document.querySelectorAll('.modal-overlay[id^="report-"]');
+    var open = Array.prototype.filter.call(reportModals, function(m){ return !m.hasAttribute('hidden'); });
+    if(open.length) open[open.length - 1].setAttribute('hidden', '');
+  });
+
+  function openCitiesModal(country, regionLabel){
+    var filters = getReportFilters();
+    var q = 'country=' + encodeURIComponent(country) + '&cabin=' + encodeURIComponent(filters.cabin) + '&min_seats=' + minSeats;
+    if(filters.origin) q += '&origin=' + encodeURIComponent(filters.origin);
+    document.getElementById('report-cities-title').textContent = regionLabel + ' \u2013 Cities';
+    document.getElementById('report-cities-body').innerHTML = '<p style="color:#86868b">Loading…</p>';
+    document.getElementById('report-cities-modal').removeAttribute('hidden');
+    fetch('/api/reports/region/cities?' + q).then(function(r){ return r.json(); }).then(function(data){
+      var rows = data.table || [];
+      if(!rows.length){ document.getElementById('report-cities-body').innerHTML = '<p class="report-msg">No cities.</p>'; return; }
+      var defaultOrigin = filters.origin || 'CPH';
+      var h = '<table class="rtable"><thead><tr><th>Origin</th><th>City</th><th>Code</th><th>Flights</th><th>Biz</th><th>Plus</th><th>Eco</th></tr></thead><tbody>';
+      rows.forEach(function(r){
+        var o = r.origin || defaultOrigin;
+        h += '<tr class="row-clickable report-modal-city-row" data-origin="' + o + '" data-city="' + (r.city || '').replace(/"/g,'&quot;') + '" data-code="' + (r.code || '') + '">';
+        h += '<td>' + o + '</td><td>' + (r.city || '') + '</td><td>' + (r.code || '') + '</td><td>' + (r.flights || 0) + '</td><td>' + (r.biz || 0) + '</td><td>' + (r.plus || 0) + '</td><td>' + (r.eco || 0) + '</td></tr>';
+      });
+      h += '</tbody></table>';
+      document.getElementById('report-cities-body').innerHTML = h;
+      document.getElementById('report-cities-body').querySelectorAll('.report-modal-city-row').forEach(function(tr){
+        tr.addEventListener('click', function(){
+          openCalendarModal(this.dataset.origin, this.dataset.code, this.dataset.city);
+        });
+      });
+    }).catch(function(){ document.getElementById('report-cities-body').innerHTML = '<p style="color:#c00">Failed to load.</p>'; });
+  }
+
+  var DN = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  function renderDetailLegs(legs, bookUrl){
+    var h = '<div class="detail-legs">';
+    ['outbound','inbound'].forEach(function(dir){ var l = legs[dir]; if(!l) return;
+      h += '<div class="detail-leg"><div class="dl-t">'+dir+'</div><div class="dl-d">'+l.date+'</div><div class="dl-w">'+DN[new Date(l.date+'T00:00:00').getDay()]+'</div><div class="dl-s">'
+        +(l.ab>0?'<div>Business: <strong>'+l.ab+'</strong></div>':'')
+        +(l.ap>0?'<div>Plus: <strong>'+l.ap+'</strong></div>':'')
+        +(l.ag>0?'<div>Economy: <strong>'+l.ag+'</strong></div>':'')
+        +'</div></div>';
+    });
+    h += '</div><a class="book-btn" href="'+bookUrl+'" target="_blank" rel="noopener">Book on SAS ↗</a>';
+    return h;
+  }
+  function filterFlightsToDest(flights, dest){
+    if(!Array.isArray(flights)) return [];
+    return flights.filter(function(f){ var id = f.flightId || ''; return id.split('-').pop() === dest; });
+  }
+  function renderRoutesFlights(flights, destLabel){
+    var list = Array.isArray(flights) ? flights : [];
+    if(!list.length) return '';
+    var h = '<div class="detail-per-flight-section"><h4>'+destLabel+'</h4>';
+    list.forEach(function(f){
+      var dep = f.departureTime || '—';
+      var arr = f.arrivalTime || '—';
+      var av = f.availability || {};
+      var parts = [];
+      if(av.AB) parts.push('Biz '+av.AB);
+      if(av.AP) parts.push('Plus '+av.AP);
+      if(av.AG) parts.push('Eco '+av.AG);
+      h += '<div class="detail-flight-row"><span class="detail-flight-times">'+dep+' → '+arr+'</span><span class="detail-flight-avail">'+parts.join(' · ')+'</span></div>';
+    });
+    h += '</div>';
+    return h;
+  }
+  function appendRoutesToBody(db, origin, code, dateStr){
+    var msg = '<p class="detail-per-flight-section" style="color:#86868b;font-size:.85rem">Flight times for this date are not available from SAS.</p>';
+    Promise.all([
+      fetch('/api/routes?origin='+encodeURIComponent(origin)+'&dest='+encodeURIComponent(code)+'&date='+encodeURIComponent(dateStr)).then(function(r){ return r.json(); }),
+      fetch('/api/routes?origin='+encodeURIComponent(code)+'&dest='+encodeURIComponent(origin)+'&date='+encodeURIComponent(dateStr)).then(function(r){ return r.json(); })
+    ]).then(function(results){
+      var outbound = results[0], inbound = results[1];
+      var outList = (Array.isArray(outbound) ? filterFlightsToDest(outbound, code) : []);
+      var inList = (Array.isArray(inbound) ? filterFlightsToDest(inbound, origin) : []);
+      if(outbound && outbound._error && !outList.length) outList = [];
+      if(inbound && inbound._error && !inList.length) inList = [];
+      if(outList.length) db.insertAdjacentHTML('beforeend', renderRoutesFlights(outList, 'Outbound flights'));
+      if(inList.length) db.insertAdjacentHTML('beforeend', renderRoutesFlights(inList, 'Return flights'));
+      if(!outList.length && !inList.length) db.insertAdjacentHTML('beforeend', msg);
+    }).catch(function(){ db.insertAdjacentHTML('beforeend', msg); });
+  }
+  function appendWeekendRoutesToBody(db, origin, code, outbound, inbound){
+    var msg = '<p class="detail-per-flight-section" style="color:#86868b;font-size:.85rem">Flight times for this date are not available from SAS.</p>';
+    fetch('/api/weekend-routes?origin='+encodeURIComponent(origin)+'&airport_code='+encodeURIComponent(code)+'&outbound='+encodeURIComponent(outbound)+'&inbound='+encodeURIComponent(inbound))
+      .then(function(r){ return r.json(); }).then(function(data){
+        var hasOut = data.outbound && Array.isArray(data.outbound.flights) && data.outbound.flights.length;
+        var hasIn = data.inbound && Array.isArray(data.inbound.flights) && data.inbound.flights.length;
+        if(hasOut){
+          var outList = filterFlightsToDest(data.outbound.flights, code);
+          db.insertAdjacentHTML('beforeend', renderRoutesFlights(outList, 'Outbound flights'));
+        }
+        if(hasIn){
+          var inList = filterFlightsToDest(data.inbound.flights, origin);
+          db.insertAdjacentHTML('beforeend', renderRoutesFlights(inList, 'Return flights'));
+        }
+        if(!hasOut && !hasIn)
+          db.insertAdjacentHTML('beforeend', msg);
+      }).catch(function(){ db.insertAdjacentHTML('beforeend', msg); });
+  }
+  function showDetailDay(origin, code, dateStr){
+    var dm = document.getElementById('report-detail-modal'), db = document.getElementById('report-detail-body'), dt = document.getElementById('report-detail-title');
+    dm.removeAttribute('hidden'); db.innerHTML = '<div style="text-align:center;padding:2rem;color:#86868b">Loading…</div>';
+    fetch('/api/detail?origin='+encodeURIComponent(origin)+'&dest='+encodeURIComponent(code)+'&date='+encodeURIComponent(dateStr))
+      .then(function(r){ return r.json(); }).then(function(data){
+        if(data.error){ db.innerHTML = '<p style="color:#c00">'+data.error+'</p>'; return; }
+        var fl = data.legs.outbound || data.legs.inbound || {}; dt.textContent = (fl.city_name || code) + ' (' + code + ')';
+        var ct = origin + ' → ' + code + ' · ' + dateStr;
+        db.innerHTML = '<div class="copy-row"><span>'+ct+'</span><button class="copy-btn" type="button">Copy</button></div>'+renderDetailLegs(data.legs, data.booking_url);
+        db.querySelector('.copy-btn').onclick = function(){ navigator.clipboard.writeText(ct); this.textContent = 'Copied!'; };
+        appendRoutesToBody(db, origin, code, dateStr);
+      }).catch(function(){ db.innerHTML = '<p style="color:#c00">Failed to load.</p>'; });
+  }
+  function showDetailPair(origin, code, outbound, inbound){
+    var dm = document.getElementById('report-detail-modal'), db = document.getElementById('report-detail-body'), dt = document.getElementById('report-detail-title');
+    dm.removeAttribute('hidden'); db.innerHTML = '<div style="text-align:center;padding:2rem;color:#86868b">Loading…</div>';
+    fetch('/api/weekend-pair-detail?origin='+encodeURIComponent(origin)+'&dest='+encodeURIComponent(code)+'&outbound='+encodeURIComponent(outbound)+'&inbound='+encodeURIComponent(inbound))
+      .then(function(r){ return r.json(); }).then(function(data){
+        if(data.error){ db.innerHTML = '<p style="color:#c00">'+data.error+'</p>'; return; }
+        var fl = data.outbound || data.inbound || {}; var city = fl.city_name || code;
+        dt.textContent = city + ' (' + code + ') – Weekend';
+        var days = Math.round((new Date(inbound+'T00:00:00') - new Date(outbound+'T00:00:00'))/86400000);
+        var ct = origin + ' → ' + code + ' · ' + outbound + ' → ' + inbound + ' (' + days + 'd)';
+        db.innerHTML = '<div class="copy-row"><span>'+ct+'</span><button class="copy-btn" type="button">Copy</button></div>'
+          +'<p style="font-size:.85rem;color:#86868b;margin:0 0 .75rem">'+days+'-day trip · '+origin+' → '+city+' → '+origin+'</p>'
+          +renderDetailLegs({ outbound: data.outbound, inbound: data.inbound }, data.booking_url);
+        db.querySelector('.copy-btn').onclick = function(){ navigator.clipboard.writeText(ct); this.textContent = 'Copied!'; };
+        appendWeekendRoutesToBody(db, origin, code, outbound, inbound);
+      }).catch(function(){ db.innerHTML = '<p style="color:#c00">Failed to load.</p>'; });
+  }
+
+  function openCalendarModal(origin, code, cityLabel){
+    var routeTitle = (origin || '') + ' \u2192 ' + (cityLabel || code) + ' (' + code + ')';
+    document.getElementById('report-calendar-title').textContent = routeTitle + ' – Weekend pairs';
+    document.getElementById('report-calendar-body').innerHTML = '<p style="color:#86868b">Loading…</p>';
+    document.getElementById('report-calendar-modal').removeAttribute('hidden');
+    var cabin = getReportFilters().cabin || 'all';
+    var q = 'origin=' + encodeURIComponent(origin) + '&code=' + encodeURIComponent(code) + '&min_seats=' + minSeats + '&cabin=' + encodeURIComponent(cabin);
+    Promise.all([
+      fetch('/api/reports/calendar/weekend-pairs?' + q).then(function(r){ return r.json(); }),
+      fetch('/api/reports/calendar?' + q).then(function(r){ return r.json(); })
+    ]).then(function(results){
+      var pairData = results[0], dayData = results[1];
+      var err = pairData.error || dayData.error;
+      if(err){ document.getElementById('report-calendar-body').innerHTML = '<p style="color:#c00">' + (err || 'Failed to load') + '</p>'; return; }
+      var destLabel = (dayData.city || cityLabel || dayData.code || code);
+      document.getElementById('report-calendar-title').textContent = (dayData.origin || origin) + ' \u2192 ' + destLabel + ' (' + (dayData.code || code) + ') – Weekend pairs';
+      var pairs = pairData.pairs || [];
+      var days = dayData.days || {};
+      var weekendPairDates = new Set();
+      pairs.forEach(function(p){ weekendPairDates.add(p.outbound); weekendPairDates.add(p.inbound); });
+      var html = '';
+      html += '<h3 class="card-section-title" style="margin-top:0">Daily availability – weekend days only (click for flight details)</h3>';
+      html += '<div class="plus-legend"><span class="calendar-legend-out">Outbound</span><span class="calendar-legend-in">Inbound</span></div>';
+      var today = new Date(); today.setHours(0,0,0,0);
+      var todayStr = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+      var monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      var months = [];
+      for(var i = 0; i < 12; i++){
+        var m = (today.getMonth() + i) % 12, y = today.getFullYear() + Math.floor((today.getMonth() + i) / 12);
+        var monthStart = new Date(y, m, 1), monthEnd = new Date(y, m + 1, 0);
+        var rangeEnd = new Date(today); rangeEnd.setDate(rangeEnd.getDate() + 365);
+        if(monthEnd > rangeEnd) monthEnd = rangeEnd;
+        var rangeStart = i === 0 ? today : monthStart;
+        var monthDays = [];
+        for(var d = new Date(rangeStart); d <= monthEnd && d >= monthStart; d.setDate(d.getDate() + 1)){
+          var dateStr = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+          var dayData = days[dateStr] || {};
+          var out = dayData.outbound || {}, inb = dayData.inbound || {};
+          monthDays.push({
+            date: dateStr, day: d.getDate(),
+            out: (out.ab||0)+(out.ap||0)+(out.ag||0), in: (inb.ab||0)+(inb.ap||0)+(inb.ag||0),
+            isToday: dateStr === todayStr,
+            inPair: weekendPairDates.has(dateStr)
+          });
+        }
+        months.push({ year: y, month: m, days: monthDays });
+      }
+      var dowLabels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+      function monFirstDow(d){ return (d.getDay() + 6) % 7; }
+      html += '<div class="year-cal-grid year-cal-grid-3x4">';
+      months.forEach(function(mon, idx){
+        var label = monthNames[mon.month] + ' ' + mon.year;
+        html += '<div class="month-card"><div class="month-label">'+label+'</div>';
+        html += '<div class="month-days-header">';
+        dowLabels.forEach(function(w){ html += '<div class="calendar-dow">'+w+'</div>'; });
+        html += '</div><div class="month-days">';
+        var firstDate = idx === 0 && mon.days.length ? new Date(mon.days[0].date+'T00:00:00') : new Date(mon.year, mon.month, 1);
+        var leadBlanks = monFirstDow(firstDate);
+        for(var k = 0; k < leadBlanks; k++) html += '<div class="calendar-day"></div>';
+        mon.days.forEach(function(dd){
+          var inPair = dd.inPair && (dd.out > 0 || dd.in > 0);
+          var cls = 'calendar-day';
+          if(inPair) cls += ' has-data is-clickable';
+          if(dd.isToday) cls += ' is-today';
+          html += '<div class="'+cls+'"' + (inPair ? ' data-date="'+dd.date+'" title="'+dd.date+' – click for details"' : '') + '>';
+          html += '<span class="calendar-day-num">'+dd.day+'</span>';
+          if(inPair){
+            html += '<div class="calendar-dual-badges">';
+            if(dd.out>0) html += '<span class="calendar-day-badge calendar-day-badge-out">'+dd.out+'</span>'; else html += '<span></span>';
+            if(dd.in>0) html += '<span class="calendar-day-badge calendar-day-badge-in">'+dd.in+'</span>'; else html += '<span></span>';
+            html += '</div>';
+          }
+          html += '</div>';
+        });
+        html += '</div></div>';
+      });
+      html += '</div>';
+      html += '<div class="calendar-list-collapse" id="report-calendar-pairs-collapse">';
+      html += '<button type="button" class="collapse-head" aria-expanded="false">Weekend pairs (Out Wed–Fri, Back Sat–Mon) <span class="collapse-chevron">▼</span></button>';
+      html += '<div class="collapse-body">';
+      if(pairs.length){
+        html += '<div class="table-wrapper"><table class="rtable"><thead><tr><th>Outbound</th><th>Return</th><th>Out</th><th>Back</th></tr></thead><tbody>';
+        pairs.forEach(function(p){
+          var outSeats = (p.ab_out||0)+(p.ap_out||0)+(p.ag_out||0);
+          var inSeats = (p.ab_in||0)+(p.ap_in||0)+(p.ag_in||0);
+          html += '<tr class="row-clickable report-weekend-pair-row" data-origin="'+origin+'" data-code="'+code+'" data-outbound="'+p.outbound+'" data-inbound="'+p.inbound+'">';
+          html += '<td>'+p.outbound+'</td><td>'+p.inbound+'</td><td>'+outSeats+'</td><td>'+inSeats+'</td></tr>';
+        });
+        html += '</tbody></table></div>';
+      } else {
+        html += '<p class="report-msg" style="margin-bottom:0">No weekend pairs for this route in the next 365 days.</p>';
+      }
+      html += '</div></div>';
+      document.getElementById('report-calendar-body').innerHTML = html;
+      var collapseEl = document.getElementById('report-calendar-pairs-collapse');
+      if(collapseEl){
+        collapseEl.querySelector('.collapse-head').addEventListener('click', function(){
+          collapseEl.classList.toggle('is-open');
+          this.setAttribute('aria-expanded', collapseEl.classList.contains('is-open'));
+        });
+      }
+      document.getElementById('report-calendar-body').querySelectorAll('.report-weekend-pair-row').forEach(function(tr){
+        tr.addEventListener('click', function(){ showDetailPair(this.dataset.origin, this.dataset.code, this.dataset.outbound, this.dataset.inbound); });
+      });
+      document.getElementById('report-calendar-body').querySelectorAll('.calendar-day.has-data').forEach(function(el){
+        el.addEventListener('click', function(){ showDetailDay(origin, code, this.dataset.date); });
+      });
+    }).catch(function(){ document.getElementById('report-calendar-body').innerHTML = '<p style="color:#c00">Failed to load.</p>'; });
+  }
+
+  document.querySelectorAll('.report-region-row').forEach(function(tr){
+    tr.addEventListener('click', function(){ openCitiesModal(this.dataset.country, this.dataset.region); });
+  });
+  document.querySelectorAll('.report-city-row').forEach(function(tr){
+    tr.addEventListener('click', function(){ openCalendarModal(this.dataset.origin, this.dataset.code, this.dataset.city); });
+  });
+  document.querySelectorAll('.report-weekend-city-row').forEach(function(tr){
+    tr.addEventListener('click', function(){ openCalendarModal(this.dataset.origin, this.dataset.code, this.dataset.city); });
+  });
+})();
+</script>
+{% endblock %}
