@@ -2,11 +2,26 @@
 {% block title %}Partner Awards – Virgin Atlantic – SAS Awards{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h1 class="page-title">Virgin Atlantic Dashboard</h1>
-  <p class="page-subtitle" style="margin:0;color:var(--color-text-secondary);font-size:1rem;">EuroBonus on Virgin Atlantic · Coming soon</p>
+  <h1 class="page-title">Virgin Atlantic</h1>
+  <p class="page-subtitle" style="margin:0;color:#86868b;font-size:1rem;">EuroBonus on Virgin Atlantic · Coming soon</p>
 </div>
 
 <div class="card">
+  <div class="card-inner">
+    <h3 class="card-section-title">Flights from London Heathrow</h3>
+    <p class="table-hint" style="margin:0 0 1rem;font-size:0.9rem;">Destinations served by Virgin Atlantic from LHR. Award availability scanning will be added in a future update.</p>
+    <div class="virgin-routes-grid">
+      {% for city, code in lhr_routes %}
+      <div class="virgin-route-item">
+        <span class="virgin-route-city">{{ city }}</span>
+        <span class="virgin-route-code">LHR → {{ code }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:1rem;">
   <div class="card-inner">
     <h3 class="card-section-title">1. Select scope</h3>
     <div class="toolbar filters" style="opacity:0.6;pointer-events:none;">
@@ -114,9 +129,25 @@
 })();
 </script>
 <style>
+.virgin-routes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.5rem 1.25rem;
+}
+.virgin-route-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.5rem 0.65rem;
+  background: rgba(0,0,0,0.03);
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+.virgin-route-city { font-weight: 600; color: #1d1d1f; }
+.virgin-route-code { font-size: 0.8rem; color: #86868b; letter-spacing: 0.02em; }
 .btn-remove {
   width: 1.25rem; height: 1.25rem; padding: 0; font-size: 1rem; line-height: 1;
-  color: var(--color-text-danger); background: transparent; border: 1px solid var(--color-border-default);
+  color: #c00; background: transparent; border: 1px solid rgba(0,0,0,0.12);
   border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
 }
 .btn-remove:hover { background: rgba(200,0,0,0.08); }

@@ -11,11 +11,16 @@ import queries
 import regions as _regions
 from report_config import MIN_SEATS
 
+from partner_awards.airfrance.routes import bp as partner_airfrance_bp
+from partner_awards.pages import bp as partner_pages_bp
+
 ROUTES_API = "https://www.sas.se/bff/award-finder/routes/v1"
 # SAS booking: sas.se/boka/flyg is 404; use flysas.com booking page
 BOOK_BASE_URL = "https://www.flysas.com/en/book"
 
 app = Flask(__name__)
+app.register_blueprint(partner_airfrance_bp)
+app.register_blueprint(partner_pages_bp)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

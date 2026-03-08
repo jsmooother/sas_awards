@@ -462,11 +462,12 @@
       </div>
       <div class="sidebar-section">
         <div class="sidebar-section-title">Flying Blue awards</div>
-        <a href="#" class="sidebar-placeholder"><span class="sidebar-icon">·</span> Coming soon</a>
+        <a href="/partner-awards/flyingblue" class="{% if request.path == '/partner-awards/flyingblue' %}active{% endif %}"><span class="sidebar-icon">✈</span> Flying Blue</a>
+        <a href="/partner-awards/flyingblue/routes" class="{% if request.path == '/partner-awards/flyingblue/routes' %}active{% endif %}"><span class="sidebar-icon">·</span> Routes</a>
       </div>
       <div class="sidebar-section">
         <div class="sidebar-section-title">Virgin Atlantic rewards</div>
-        <a href="#" class="sidebar-placeholder"><span class="sidebar-icon">·</span> Coming soon</a>
+        <a href="/partner-awards/virgin" class="{% if request.path == '/partner-awards/virgin' %}active{% endif %}"><span class="sidebar-icon">✈</span> Virgin Atlantic</a>
       </div>
     </aside>
     <main class="main">
