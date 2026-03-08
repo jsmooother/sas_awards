@@ -74,6 +74,12 @@
   .book-btn:hover{background:#000066}
   .copy-row{display:flex;align-items:center;justify-content:space-between;padding:.45rem .65rem;background:rgba(0,0,0,.03);border-radius:8px;font-size:.78rem;color:#515154;margin-bottom:.7rem}
   .copy-btn{padding:.2rem .5rem;border-radius:6px;border:1px solid rgba(0,0,0,.12);background:#fff;font-size:.72rem;cursor:pointer;color:#007aff;font-weight:500}
+  .detail-per-flight-section{margin-top:1rem;padding-top:1rem;border-top:1px solid rgba(0,0,0,.08)}
+  .detail-per-flight-section h4{font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#86868b;margin:0 0 .5rem}
+  .detail-flight-row{display:flex;align-items:center;gap:.75rem;padding:.5rem .6rem;background:rgba(0,0,0,.03);border-radius:8px;margin-bottom:.35rem;font-size:.85rem}
+  .detail-flight-row:last-child{margin-bottom:0}
+  .detail-flight-times{font-weight:600;min-width:100px}
+  .detail-flight-avail{font-size:.78rem;color:#515154}
 
   @media(max-width:768px){
     .filter-row{flex-direction:column;align-items:stretch}
@@ -127,9 +133,12 @@
           {% endif %}
         </div>
       </div>
-      <div class="f-field">
+      <div class="f-field f-field-city">
         <span class="f-field-label">City / code</span>
-        <input class="f-input" type="text" name="city" value="{{ filters.city }}" placeholder="e.g. Barcelona">
+        <div style="display:flex;gap:.4rem;align-items:stretch">
+          <input class="f-input" type="text" name="city" value="{{ filters.city }}" placeholder="e.g. Barcelona" id="city-input">
+          <button type="submit" class="go-btn">Search</button>
+        </div>
       </div>
       <div class="f-field">
         <span class="f-field-label">Origin</span>
@@ -205,7 +214,7 @@
   {# Regular flight rows #}
   {% else %}
     {% for row in results.rows %}
-    <div class="rr" onclick="od('{{ row.origin }}','{{ row.airport_code }}','{{ row.date }}')">
+    <div class="rr" onclick="od('{{ row.origin }}','{{ row.airport_code }}','{{ row.date }}','{{ row.direction }}')">
       <div class="rr-origin">{{ row.origin }}</div>
       <div><div class="rr-city">{{ row.city_name }} <span style="color:#86868b;font-weight:400;font-size:.78rem">{{ row.airport_code }}</span></div><div class="rr-sub">{{ row.country_name }} · {{ row.direction }}</div></div>
       <div class="rr-date">{{ row.date }}</div>
@@ -268,7 +277,15 @@
   form.querySelectorAll('select[name="origin"], input[name="min_seats"], input[name="from"], input[name="to"]').forEach(function(el){
     el.addEventListener('change', submitForm);
   });
-  form.querySelector('input[name="city"]').addEventListener('blur', submitForm);
+  var cityInput = form.querySelector('input[name="city"]');
+  cityInput.addEventListener('blur', submitForm);
+  cityInput.addEventListener('keydown', function(e){
+    if(e.key === 'Enter'){ e.preventDefault(); submitForm(); }
+  });
+  form.addEventListener('submit', function(){
+    var btn = form.querySelector('.go-btn');
+    if(btn){ btn.disabled = true; btn.textContent = '…'; }
+  });
 
   var m=document.getElementById('dm'),mb=document.getElementById('db'),mt=document.getElementById('dt');
   function cm(){m.setAttribute('hidden','')}
@@ -288,30 +305,73 @@
     return h;
   }
 
-  window.od=function(o,d,dt){
+  window.od=function(o,d,dt,dir){
     m.removeAttribute('hidden');mb.innerHTML='<div style="text-align:center;padding:2rem;color:#86868b">Loading…</div>';
     fetch('/api/detail?origin='+encodeURIComponent(o)+'&dest='+encodeURIComponent(d)+'&date='+encodeURIComponent(dt))
     .then(function(r){return r.json()}).then(function(data){
       if(data.error){mb.innerHTML='<p style="color:#c00">'+data.error+'</p>';return}
       var fl=data.legs.outbound||data.legs.inbound||{},city=fl.city_name||d;
-      mt.textContent=city+' ('+d+')';
-      var ct=o+' → '+d+' · '+dt;
-      mb.innerHTML='<div class="copy-row"><span>'+ct+'</span><button class="copy-btn" onclick="navigator.clipboard.writeText(\''+ct+'\');this.textContent=\'Copied!\'">Copy</button></div>'+renderLegs(data.legs,data.booking_url);
+      mt.textContent=o+' → '+city+' ('+d+')';
+      var direction = (dir || 'outbound').toLowerCase();
+      var ct = direction === 'inbound' ? (d+' → '+o+' · '+dt) : (o+' → '+d+' · '+dt);
+      mb.innerHTML='<div class="copy-row"><span>'+ct+'</span><button class="copy-btn" onclick="navigator.clipboard.writeText(\''+ct.replace(/'/g,"\\'")+'\');this.textContent=\'Copied!\'">Copy</button></div>'+renderLegs(data.legs,data.booking_url);
+      appendDayRoutesToModal(mb,o,d,dt,dir||'outbound');
     }).catch(function(){mb.innerHTML='<p style="color:#c00">Failed to load.</p>'});
   };
 
+  function filterFlightsToDest(flights, dest){
+    if(!Array.isArray(flights)) return [];
+    return flights.filter(function(f){ var id=f.flightId||''; return id.split('-').pop()===dest; });
+  }
+  function renderRoutesFlights(list, label){
+    if(!list.length) return '';
+    var h='<div class="detail-per-flight-section"><h4>'+label+'</h4>';
+    list.forEach(function(f){
+      var dep=f.departureTime||'—', arr=f.arrivalTime||'—';
+      var av=f.availability||{}; var parts=[];
+      if(av.AB) parts.push('Biz '+av.AB); if(av.AP) parts.push('Plus '+av.AP); if(av.AG) parts.push('Eco '+av.AG);
+      h+='<div class="detail-flight-row"><span class="detail-flight-times">'+dep+' → '+arr+'</span><span class="detail-flight-avail">'+parts.join(' · ')+'</span></div>';
+    });
+    return h+'</div>';
+  }
+  function appendDayRoutesToModal(mb, origin, dest, dateStr, direction){
+    var msg = '<p class="detail-per-flight-section" style="color:#86868b;font-size:.85rem">Flight times for this date are not available from SAS.</p>';
+    var apiOrigin = (direction === 'inbound') ? dest : origin;
+    var apiDest = (direction === 'inbound') ? origin : dest;
+    var filterBy = apiDest;
+    fetch('/api/routes?origin='+encodeURIComponent(apiOrigin)+'&dest='+encodeURIComponent(apiDest)+'&date='+encodeURIComponent(dateStr))
+    .then(function(r){return r.json()}).then(function(data){
+      if(data && data._error){ mb.insertAdjacentHTML('beforeend',msg); return; }
+      var list = Array.isArray(data) ? filterFlightsToDest(data, filterBy) : (data && data.flights ? filterFlightsToDest(data.flights, filterBy) : []);
+      if(list.length) mb.insertAdjacentHTML('beforeend', renderRoutesFlights(list, 'Flights (times & seats)'));
+      else mb.insertAdjacentHTML('beforeend', msg);
+    }).catch(function(){ mb.insertAdjacentHTML('beforeend', msg); });
+  }
+  function appendWeekendRoutesToModal(mb, origin, code, outbound, inbound){
+    var msg = '<p class="detail-per-flight-section" style="color:#86868b;font-size:.85rem">Flight times for this date are not available from SAS.</p>';
+    fetch('/api/weekend-routes?origin='+encodeURIComponent(origin)+'&airport_code='+encodeURIComponent(code)+'&outbound='+encodeURIComponent(outbound)+'&inbound='+encodeURIComponent(inbound))
+    .then(function(r){return r.json()}).then(function(data){
+      if(data._error){ mb.insertAdjacentHTML('beforeend',msg); return; }
+      var outList=data.outbound&&Array.isArray(data.outbound.flights)?filterFlightsToDest(data.outbound.flights,code):[];
+      var inList=data.inbound&&Array.isArray(data.inbound.flights)?filterFlightsToDest(data.inbound.flights,origin):[];
+      if(outList.length) mb.insertAdjacentHTML('beforeend',renderRoutesFlights(outList,'Outbound flights'));
+      if(inList.length) mb.insertAdjacentHTML('beforeend',renderRoutesFlights(inList,'Return flights'));
+      if(!outList.length&&!inList.length) mb.insertAdjacentHTML('beforeend',msg);
+    }).catch(function(){ mb.insertAdjacentHTML('beforeend',msg); });
+  }
   window.owp=function(o,d,outDt,inDt){
     m.removeAttribute('hidden');mb.innerHTML='<div style="text-align:center;padding:2rem;color:#86868b">Loading…</div>';
     fetch('/api/weekend-pair-detail?origin='+encodeURIComponent(o)+'&dest='+encodeURIComponent(d)+'&outbound='+encodeURIComponent(outDt)+'&inbound='+encodeURIComponent(inDt))
     .then(function(r){return r.json()}).then(function(data){
       if(data.error){mb.innerHTML='<p style="color:#c00">'+data.error+'</p>';return}
       var fl=data.outbound||data.inbound||{},city=fl.city_name||d;
-      mt.textContent=city+' ('+d+') – Weekend';
+      mt.textContent=o+' → '+city+' ('+d+') – Weekend';
       var days=Math.round((new Date(inDt+'T00:00:00')-new Date(outDt+'T00:00:00'))/86400000);
       var ct=o+' → '+d+' · '+outDt+' → '+inDt+' ('+days+'d)';
       mb.innerHTML='<div class="copy-row"><span>'+ct+'</span><button class="copy-btn" onclick="navigator.clipboard.writeText(\''+ct+'\');this.textContent=\'Copied!\'">Copy</button></div>'
         +'<p style="font-size:.85rem;color:#86868b;margin:0 0 .75rem">'+days+'-day trip · '+o+' → '+city+' → '+o+'</p>'
         +renderLegs({outbound:data.outbound,inbound:data.inbound},data.booking_url);
+      appendWeekendRoutesToModal(mb,o,d,outDt,inDt);
     }).catch(function(){mb.innerHTML='<p style="color:#c00">Failed to load.</p>'});
   };
 })();

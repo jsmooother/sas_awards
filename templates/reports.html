@@ -40,6 +40,13 @@
   .detail-flight-times{font-weight:600;min-width:100px}
   .detail-flight-avail{font-size:.78rem;color:#515154}
   .detail-flight-avail span{margin-right:.5rem}
+  .calendar-list-collapse{ margin-top:1.25rem; border:1px solid rgba(0,0,0,.08); border-radius:10px; overflow:hidden }
+  .calendar-list-collapse .collapse-head{ display:flex; align-items:center; justify-content:space-between; padding:.6rem 1rem; background:rgba(0,0,0,.03); cursor:pointer; font-size:.85rem; font-weight:400; color:#515154; user-select:none; border:none; width:100%; text-align:left }
+  .calendar-list-collapse .collapse-head:hover{ background:rgba(0,0,0,.06); color:#1d1d1f }
+  .calendar-list-collapse .collapse-head .collapse-chevron{ font-size:.7rem; color:#86868b; transition:transform .2s; flex-shrink:0; margin-left:.5rem }
+  .calendar-list-collapse.is-open .collapse-head .collapse-chevron{ transform:rotate(180deg) }
+  .calendar-list-collapse .collapse-body{ display:none; padding:1rem }
+  .calendar-list-collapse.is-open .collapse-body{ display:block }
 </style>
 
 <div class="page-header">
@@ -66,7 +73,10 @@
     <label>Country<select name="country" class="report-filter-country"><option value="">All</option>{% for c in countries_list %}<option value="{{ c }}" {% if filters.country==c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></label>
   </form>
   {% if data and data.chart and data.chart.labels %}
-  <div class="chart-wrap"><canvas id="chart"></canvas></div>
+  <div class="calendar-list-collapse report-chart-collapse" id="report-chart-collapse">
+    <button type="button" class="collapse-head" aria-expanded="false">Chart <span class="collapse-chevron">▼</span></button>
+    <div class="collapse-body"><div class="chart-wrap"><canvas id="chart"></canvas></div></div>
+  </div>
   {% endif %}
 </div></div>
 {% if data and data.table %}
@@ -90,7 +100,10 @@
     <label>Country<select name="country" class="report-filter-country"><option value="">All</option>{% for c in countries_list %}<option value="{{ c }}" {% if filters.country==c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></label>
   </form>
   {% if data and data.chart and data.chart.labels %}
-  <div class="chart-wrap"><canvas id="chart"></canvas></div>
+  <div class="calendar-list-collapse report-chart-collapse" id="report-chart-collapse">
+    <button type="button" class="collapse-head" aria-expanded="false">Chart <span class="collapse-chevron">▼</span></button>
+    <div class="collapse-body"><div class="chart-wrap"><canvas id="chart"></canvas></div></div>
+  </div>
   {% endif %}
 </div></div>
 {% if data and data.table %}
@@ -113,7 +126,10 @@
     <label>Country<select name="country" class="report-filter-country"><option value="">All</option>{% for c in countries_list %}<option value="{{ c }}" {% if filters.country==c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></label>
   </form>
   {% if data and data.chart and data.chart.labels %}
-  <div class="chart-wrap"><canvas id="chart"></canvas></div>
+  <div class="calendar-list-collapse report-chart-collapse" id="report-chart-collapse">
+    <button type="button" class="collapse-head" aria-expanded="false">Chart <span class="collapse-chevron">▼</span></button>
+    <div class="collapse-body"><div class="chart-wrap"><canvas id="chart"></canvas></div></div>
+  </div>
   {% endif %}
 </div></div>
 {% if data and data.table %}
@@ -135,9 +151,9 @@
     <input type="hidden" name="cabin" id="report-weekend-cabin" value="{{ filters.cabin }}">
     <label>Cabin
       <div class="report-pill-group" aria-label="Cabin filter">
-        <div class="report-pill {% if filters.cabin == 'all' %}active{% endif %}" data-cabin="all">All</div>
-        <div class="report-pill {% if filters.cabin == 'business_plus' %}active{% endif %}" data-cabin="business_plus">Biz &amp; Plus</div>
         <div class="report-pill {% if filters.cabin == 'business' %}active{% endif %}" data-cabin="business">Business</div>
+        <div class="report-pill {% if filters.cabin == 'business_plus' %}active{% endif %}" data-cabin="business_plus">Biz &amp; Plus</div>
+        <div class="report-pill {% if filters.cabin == 'all' %}active{% endif %}" data-cabin="all">All</div>
       </div>
     </label>
     <label>Origin<select name="origin"><option value="">All</option><option value="ARN" {% if filters.origin=='ARN' %}selected{% endif %}>ARN</option><option value="CPH" {% if filters.origin=='CPH' %}selected{% endif %}>CPH</option></select></label>
@@ -151,7 +167,10 @@
   </div>
   {% endif %}
   {% if data and data.chart and data.chart.labels %}
-  <div class="chart-wrap"><canvas id="chart"></canvas></div>
+  <div class="calendar-list-collapse report-chart-collapse" id="report-chart-collapse">
+    <button type="button" class="collapse-head" aria-expanded="false">Chart <span class="collapse-chevron">▼</span></button>
+    <div class="collapse-body"><div class="chart-wrap"><canvas id="chart"></canvas></div></div>
+  </div>
   {% endif %}
 </div></div>
 {% if data and data.table %}
@@ -173,7 +192,10 @@
 <div class="card"><div class="card-inner">
   <p style="font-size:.88rem;color:#86868b;margin:0 0 1rem">New business flights: {{ data.prev }} → {{ data.latest }}</p>
   {% if data.chart and data.chart.labels %}
-  <div class="chart-wrap"><canvas id="chart"></canvas></div>
+  <div class="calendar-list-collapse report-chart-collapse" id="report-chart-collapse">
+    <button type="button" class="collapse-head" aria-expanded="false">Chart <span class="collapse-chevron">▼</span></button>
+    <div class="collapse-body"><div class="chart-wrap"><canvas id="chart"></canvas></div></div>
+  </div>
   {% endif %}
 </div></div>
 {% if data.table %}
@@ -237,12 +259,20 @@
   var ds=d.datasets.map(function(s,i){return{label:s.label,data:s.data,
     backgroundColor:C[i%C.length],borderColor:B[i%B.length],
     borderWidth:isLine?2:1,fill:isLine?'origin':undefined,tension:.3,pointRadius:isLine?1:undefined}});
-  new Chart(el,{type:isLine?'line':'bar',data:{labels:d.labels,datasets:ds},options:{
+  var chartInstance=new Chart(el,{type:isLine?'line':'bar',data:{labels:d.labels,datasets:ds},options:{
     indexAxis:isHoriz?'y':'x',responsive:true,maintainAspectRatio:false,
     interaction:{mode:'index',intersect:false},
     plugins:{legend:{display:ds.length>1}},
     scales:{x:{beginAtZero:true,ticks:{maxRotation:45,autoSkip:true,maxTicksLimit:40,font:{size:11}}},
             y:{beginAtZero:true,ticks:{font:{size:11}}}}}});
+  var collapseEl=document.getElementById('report-chart-collapse');
+  if(collapseEl){
+    collapseEl.querySelector('.collapse-head').addEventListener('click',function(){
+      collapseEl.classList.toggle('is-open');
+      this.setAttribute('aria-expanded',collapseEl.classList.contains('is-open'));
+      if(chartInstance&&collapseEl.classList.contains('is-open')) chartInstance.resize();
+    });
+  }
 })();
 </script>
 {% endif %}
@@ -346,15 +376,23 @@
     return h;
   }
   function appendRoutesToBody(db, origin, code, dateStr){
-    fetch('/api/routes?origin='+encodeURIComponent(origin)+'&dest='+encodeURIComponent(code)+'&date='+encodeURIComponent(dateStr))
-      .then(function(r){ return r.json(); }).then(function(flights){
-        if(flights && flights._error){ db.insertAdjacentHTML('beforeend', '<p class="detail-per-flight-section" style="color:#86868b;font-size:.85rem">Flight times unavailable.</p>'); return; }
-        var list = Array.isArray(flights) ? filterFlightsToDest(flights, code) : [];
-        if(list.length) db.insertAdjacentHTML('beforeend', renderRoutesFlights(list, 'Flights (times & seats)'));
-        else db.insertAdjacentHTML('beforeend', '<p class="detail-per-flight-section" style="color:#86868b;font-size:.85rem">Flight times unavailable.</p>');
-      }).catch(function(){ db.insertAdjacentHTML('beforeend', '<p class="detail-per-flight-section" style="color:#86868b;font-size:.85rem">Flight times unavailable.</p>'); });
+    var msg = '<p class="detail-per-flight-section" style="color:#86868b;font-size:.85rem">Flight times for this date are not available from SAS.</p>';
+    Promise.all([
+      fetch('/api/routes?origin='+encodeURIComponent(origin)+'&dest='+encodeURIComponent(code)+'&date='+encodeURIComponent(dateStr)).then(function(r){ return r.json(); }),
+      fetch('/api/routes?origin='+encodeURIComponent(code)+'&dest='+encodeURIComponent(origin)+'&date='+encodeURIComponent(dateStr)).then(function(r){ return r.json(); })
+    ]).then(function(results){
+      var outbound = results[0], inbound = results[1];
+      var outList = (Array.isArray(outbound) ? filterFlightsToDest(outbound, code) : []);
+      var inList = (Array.isArray(inbound) ? filterFlightsToDest(inbound, origin) : []);
+      if(outbound && outbound._error && !outList.length) outList = [];
+      if(inbound && inbound._error && !inList.length) inList = [];
+      if(outList.length) db.insertAdjacentHTML('beforeend', renderRoutesFlights(outList, 'Outbound flights'));
+      if(inList.length) db.insertAdjacentHTML('beforeend', renderRoutesFlights(inList, 'Return flights'));
+      if(!outList.length && !inList.length) db.insertAdjacentHTML('beforeend', msg);
+    }).catch(function(){ db.insertAdjacentHTML('beforeend', msg); });
   }
   function appendWeekendRoutesToBody(db, origin, code, outbound, inbound){
+    var msg = '<p class="detail-per-flight-section" style="color:#86868b;font-size:.85rem">Flight times for this date are not available from SAS.</p>';
     fetch('/api/weekend-routes?origin='+encodeURIComponent(origin)+'&airport_code='+encodeURIComponent(code)+'&outbound='+encodeURIComponent(outbound)+'&inbound='+encodeURIComponent(inbound))
       .then(function(r){ return r.json(); }).then(function(data){
         var hasOut = data.outbound && Array.isArray(data.outbound.flights) && data.outbound.flights.length;
@@ -368,8 +406,8 @@
           db.insertAdjacentHTML('beforeend', renderRoutesFlights(inList, 'Return flights'));
         }
         if(!hasOut && !hasIn)
-          db.insertAdjacentHTML('beforeend', '<p class="detail-per-flight-section" style="color:#86868b;font-size:.85rem">Flight times unavailable.</p>');
-      }).catch(function(){ db.insertAdjacentHTML('beforeend', '<p class="detail-per-flight-section" style="color:#86868b;font-size:.85rem">Flight times unavailable.</p>'); });
+          db.insertAdjacentHTML('beforeend', msg);
+      }).catch(function(){ db.insertAdjacentHTML('beforeend', msg); });
   }
   function showDetailDay(origin, code, dateStr){
     var dm = document.getElementById('report-detail-modal'), db = document.getElementById('report-detail-body'), dt = document.getElementById('report-detail-title');
@@ -420,23 +458,10 @@
       document.getElementById('report-calendar-title').textContent = (dayData.origin || origin) + ' \u2192 ' + destLabel + ' (' + (dayData.code || code) + ') – Weekend pairs';
       var pairs = pairData.pairs || [];
       var days = dayData.days || {};
-      var html = '';
-      html += '<h3 class="card-section-title" style="margin-top:0">Weekend pairs (Out Wed–Fri, Back Sat–Mon)</h3>';
-      if(pairs.length){
-        html += '<div class="table-wrapper" style="margin-bottom:1.5rem"><table class="rtable"><thead><tr><th>Outbound</th><th>Return</th><th>Out</th><th>Back</th></tr></thead><tbody>';
-        pairs.forEach(function(p){
-          var outSeats = (p.ab_out||0)+(p.ap_out||0)+(p.ag_out||0);
-          var inSeats = (p.ab_in||0)+(p.ap_in||0)+(p.ag_in||0);
-          html += '<tr class="row-clickable report-weekend-pair-row" data-origin="'+origin+'" data-code="'+code+'" data-outbound="'+p.outbound+'" data-inbound="'+p.inbound+'">';
-          html += '<td>'+p.outbound+'</td><td>'+p.inbound+'</td><td>'+outSeats+'</td><td>'+inSeats+'</td></tr>';
-        });
-        html += '</tbody></table></div>';
-      } else {
-        html += '<p class="report-msg" style="margin-bottom:1.25rem">No weekend pairs for this route in the next 365 days.</p>';
-      }
       var weekendPairDates = new Set();
       pairs.forEach(function(p){ weekendPairDates.add(p.outbound); weekendPairDates.add(p.inbound); });
-      html += '<h3 class="card-section-title">Daily availability – weekend days only (click for flight details)</h3>';
+      var html = '';
+      html += '<h3 class="card-section-title" style="margin-top:0">Daily availability – weekend days only (click for flight details)</h3>';
       html += '<div class="plus-legend"><span class="calendar-legend-out">Outbound</span><span class="calendar-legend-in">Inbound</span></div>';
       var today = new Date(); today.setHours(0,0,0,0);
       var todayStr = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
@@ -462,7 +487,8 @@
         }
         months.push({ year: y, month: m, days: monthDays });
       }
-      var dowLabels = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+      var dowLabels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+      function monFirstDow(d){ return (d.getDay() + 6) % 7; }
       html += '<div class="year-cal-grid year-cal-grid-3x4">';
       months.forEach(function(mon, idx){
         var label = monthNames[mon.month] + ' ' + mon.year;
@@ -470,7 +496,8 @@
         html += '<div class="month-days-header">';
         dowLabels.forEach(function(w){ html += '<div class="calendar-dow">'+w+'</div>'; });
         html += '</div><div class="month-days">';
-        var leadBlanks = idx === 0 && mon.days.length ? new Date(mon.days[0].date+'T00:00:00').getDay() : new Date(mon.year, mon.month, 1).getDay();
+        var firstDate = idx === 0 && mon.days.length ? new Date(mon.days[0].date+'T00:00:00') : new Date(mon.year, mon.month, 1);
+        var leadBlanks = monFirstDow(firstDate);
         for(var k = 0; k < leadBlanks; k++) html += '<div class="calendar-day"></div>';
         mon.days.forEach(function(dd){
           var inPair = dd.inPair && (dd.out > 0 || dd.in > 0);
@@ -490,7 +517,30 @@
         html += '</div></div>';
       });
       html += '</div>';
+      html += '<div class="calendar-list-collapse" id="report-calendar-pairs-collapse">';
+      html += '<button type="button" class="collapse-head" aria-expanded="false">Weekend pairs (Out Wed–Fri, Back Sat–Mon) <span class="collapse-chevron">▼</span></button>';
+      html += '<div class="collapse-body">';
+      if(pairs.length){
+        html += '<div class="table-wrapper"><table class="rtable"><thead><tr><th>Outbound</th><th>Return</th><th>Out</th><th>Back</th></tr></thead><tbody>';
+        pairs.forEach(function(p){
+          var outSeats = (p.ab_out||0)+(p.ap_out||0)+(p.ag_out||0);
+          var inSeats = (p.ab_in||0)+(p.ap_in||0)+(p.ag_in||0);
+          html += '<tr class="row-clickable report-weekend-pair-row" data-origin="'+origin+'" data-code="'+code+'" data-outbound="'+p.outbound+'" data-inbound="'+p.inbound+'">';
+          html += '<td>'+p.outbound+'</td><td>'+p.inbound+'</td><td>'+outSeats+'</td><td>'+inSeats+'</td></tr>';
+        });
+        html += '</tbody></table></div>';
+      } else {
+        html += '<p class="report-msg" style="margin-bottom:0">No weekend pairs for this route in the next 365 days.</p>';
+      }
+      html += '</div></div>';
       document.getElementById('report-calendar-body').innerHTML = html;
+      var collapseEl = document.getElementById('report-calendar-pairs-collapse');
+      if(collapseEl){
+        collapseEl.querySelector('.collapse-head').addEventListener('click', function(){
+          collapseEl.classList.toggle('is-open');
+          this.setAttribute('aria-expanded', collapseEl.classList.contains('is-open'));
+        });
+      }
       document.getElementById('report-calendar-body').querySelectorAll('.report-weekend-pair-row').forEach(function(tr){
         tr.addEventListener('click', function(){ showDetailPair(this.dataset.origin, this.dataset.code, this.dataset.outbound, this.dataset.inbound); });
       });

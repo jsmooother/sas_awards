@@ -98,6 +98,14 @@ def reports():
         data = queries.report_new()
 
     countries_list = _regions.all_countries()
+    if tab == "weekend":
+        weekend_countries = queries.countries_with_weekend_pairs(
+            origin=origin, cabin=cabin, min_seats=min_seats
+        )
+        if weekend_countries:
+            countries_list = weekend_countries
+            if country and country not in weekend_countries:
+                countries_list = [country] + [c for c in countries_list if c != country]
     return render_template(
         "reports.html", tab=tab, data=data,
         filters={"origin": origin, "cabin": cabin, "country": country,
@@ -336,6 +344,22 @@ def legacy_weekend_detail():
     })
 
 
+def _normalize_routes_response(raw):
+    """Extract list of flight objects from SAS routes/v1 response (array or wrapped)."""
+    if raw is None:
+        return []
+    if isinstance(raw, dict) and "_error" in raw:
+        return raw  # pass through error so caller can check _error
+    if isinstance(raw, list):
+        return raw
+    if isinstance(raw, dict):
+        for key in ("flights", "routes", "data", "outbound", "inbound"):
+            val = raw.get(key)
+            if isinstance(val, list):
+                return val
+    return []
+
+
 @app.route("/api/weekend-routes")
 def legacy_weekend_routes():
     origin = request.args.get("origin", "")
@@ -352,13 +376,23 @@ def legacy_weekend_routes():
                 "departureDate": date, "direct": "false",
             }, timeout=15)
             r.raise_for_status()
-            return r.json()
+            raw = r.json()
+            out = _normalize_routes_response(raw)
+            return out if isinstance(out, list) else out  # list or {_error: ...}
         except Exception as e:
             return {"_error": str(e)}
 
+    out_res = fetch(origin, code, outbound)
+    inb_res = fetch(code, origin, inbound)
+
+    def to_payload(res):
+        if isinstance(res, dict) and "_error" in res:
+            return {"_error": res["_error"], "flights": []}
+        return {"flights": res if isinstance(res, list) else []}
+
     return jsonify({
-        "outbound": {"date": outbound, "flights": fetch(origin, code, outbound)},
-        "inbound": {"date": inbound, "flights": fetch(code, origin, inbound)},
+        "outbound": {"date": outbound, **to_payload(out_res)},
+        "inbound": {"date": inbound, **to_payload(inb_res)},
     })
 
 

@@ -222,11 +222,13 @@ def _weekend_cabin_clause(cabin, min_seats):
 
 
 def _weekend_order(cabin):
+    """Primary: outbound date (chronological). Tiebreak: inbound, then cabin score, then city."""
+    base = "outb.date ASC, inb.date ASC"
     if cabin == "business":
-        return "outb.ab + inb.ab DESC, outb.date, inb.city_name COLLATE NOCASE"
+        return f"{base}, outb.ab + inb.ab DESC, inb.city_name COLLATE NOCASE"
     if cabin == "business_plus":
-        return "outb.ab + outb.ap + inb.ab + inb.ap DESC, outb.date, inb.city_name COLLATE NOCASE"
-    return "(outb.ab*3+outb.ap*2+outb.ag + inb.ab*3+inb.ap*2+inb.ag) DESC, outb.date, inb.city_name COLLATE NOCASE"
+        return f"{base}, (outb.ab + outb.ap + inb.ab + inb.ap) DESC, inb.city_name COLLATE NOCASE"
+    return f"{base}, (outb.ab*3+outb.ap*2+outb.ag + inb.ab*3+inb.ap*2+inb.ag) DESC, inb.city_name COLLATE NOCASE"
 
 
 def _cabin_clause(cabin, min_seats):
@@ -352,13 +354,23 @@ def report_cities(countries=None, cabin="all", origin="", min_seats=MIN_SEATS):
     """, params)
     cols = ["city", "code", "country", "flights", "biz", "plus", "eco"]
     table = [dict(zip(cols, r)) for r in cur.fetchall()]
+
+    cur.execute(f"""
+        SELECT country_name,
+               SUM(ab) AS total_biz, SUM(ap) AS total_plus, SUM(ag) AS total_eco
+        FROM flights WHERE {where}
+        GROUP BY country_name
+        ORDER BY (SUM(ab)*3 + SUM(ap)*2 + SUM(ag)) DESC
+        LIMIT 25
+    """, params)
+    country_rows = cur.fetchall()
     conn.close()
 
     chart = {
-        "labels": [f"{r['city']} ({r['code']})" for r in table[:25]],
+        "labels": [r[0] for r in country_rows],
         "datasets": [{
             "label": "Total weighted seats",
-            "data": [r["biz"] * 3 + r["plus"] * 2 + r["eco"] for r in table[:25]],
+            "data": [r[1] * 3 + r[2] * 2 + r[3] for r in country_rows],
         }],
     }
     return {"chart": chart, "table": table}
@@ -408,6 +420,34 @@ def report_business(origin="", country="", min_seats=MIN_SEATS):
     return {"chart": chart, "table": table}
 
 
+def countries_with_weekend_pairs(origin="", cabin="all", min_seats=MIN_SEATS):
+    """Country names that have at least one weekend pair for the given cabin/origin (for dropdown)."""
+    seat_out, seat_in = _weekend_cabin_clause(cabin, min_seats)
+    conn = get_conn()
+    cur = conn.cursor()
+    origin_cond = "AND inb.origin = ?" if origin else ""
+    params = [TRIP_DAYS_MIN, TRIP_DAYS_MAX]
+    if origin:
+        params.append(origin)
+    cur.execute(f"""
+        SELECT DISTINCT inb.country_name
+        FROM flights AS inb
+        JOIN flights AS outb
+          ON inb.airport_code = outb.airport_code AND inb.origin = outb.origin
+        WHERE inb.direction = 'inbound' AND outb.direction = 'outbound'
+          AND {seat_out} AND {seat_in}
+          AND strftime('%w', inb.date) IN ('6','0','1')
+          AND strftime('%w', outb.date) IN ('3','4','5')
+          AND (julianday(inb.date) - julianday(outb.date)) BETWEEN ? AND ?
+          AND date(inb.date) BETWEEN date('now') AND date('now','+1 year')
+          {origin_cond}
+        ORDER BY inb.country_name
+    """, params)
+    out = [r[0] for r in cur.fetchall()]
+    conn.close()
+    return out
+
+
 def report_weekend(origin="", country="", min_seats=MIN_SEATS, cabin="all"):
     """Weekend pairs aggregated by city. cabin: all, business_plus, business."""
     seat_out, seat_in = _weekend_cabin_clause(cabin, min_seats)
@@ -422,7 +462,7 @@ def report_weekend(origin="", country="", min_seats=MIN_SEATS, cabin="all"):
         params.append(country)
 
     cur.execute(f"""
-        SELECT inb.origin, inb.city_name, inb.airport_code,
+        SELECT inb.origin, inb.city_name, inb.airport_code, inb.country_name,
                COUNT(*) AS pairs,
                MIN(outb.date) AS earliest, MAX(inb.date) AS latest
         FROM flights AS inb
@@ -435,12 +475,12 @@ def report_weekend(origin="", country="", min_seats=MIN_SEATS, cabin="all"):
           AND (julianday(inb.date) - julianday(outb.date)) BETWEEN ? AND ?
           AND date(inb.date) BETWEEN date('now') AND date('now','+1 year')
           {origin_cond} {country_cond}
-        GROUP BY inb.origin, inb.city_name, inb.airport_code
+        GROUP BY inb.origin, inb.city_name, inb.airport_code, inb.country_name
         ORDER BY pairs DESC
     """, params)
     table = [
-        {"origin": r[0], "city": r[1], "code": r[2],
-         "pairs": r[3], "earliest": r[4], "latest": r[5]}
+        {"origin": r[0], "city": r[1], "code": r[2], "country": r[3],
+         "pairs": r[4], "earliest": r[5], "latest": r[6]}
         for r in cur.fetchall()
     ]
 
@@ -450,9 +490,14 @@ def report_weekend(origin="", country="", min_seats=MIN_SEATS, cabin="all"):
         summary[r["origin"]]["cities"] += 1
         summary[r["origin"]]["pairs"] += r["pairs"]
 
+    by_country = {}
+    for r in table:
+        c = r["country"]
+        by_country[c] = by_country.get(c, 0) + r["pairs"]
+    country_sorted = sorted(by_country.items(), key=lambda x: -x[1])[:25]
     chart = {
-        "labels": [f"{r['city']} ({r['code']})" for r in table[:25]],
-        "datasets": [{"label": "Pairs", "data": [r["pairs"] for r in table[:25]]}],
+        "labels": [c for c, _ in country_sorted],
+        "datasets": [{"label": "Pairs", "data": [n for _, n in country_sorted]}],
     }
     conn.close()
     return {"chart": chart, "table": table, "summary": summary}
